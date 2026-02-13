@@ -12,6 +12,7 @@
             --text: #d0d0d0;
             --border: #2a2a2a;
             --success: #00ff88;
+            --warning: #ffca28; /* 店売りの方が高い時の色 */
         }
 
         body {
@@ -24,9 +25,8 @@
 
         h1 { text-align: center; color: var(--accent); font-size: 1.5em; letter-spacing: 3px; }
 
-        /* コントロールパネル */
         .controls {
-            max-width: 900px;
+            max-width: 1000px;
             margin: 0 auto 20px;
             display: flex;
             flex-direction: column;
@@ -67,7 +67,7 @@
 
         /* リストデザイン（横長バー） */
         .item-list {
-            max-width: 900px;
+            max-width: 1000px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
@@ -76,13 +76,14 @@
 
         .item-row {
             display: grid;
-            grid-template-columns: 40px 60px 1fr 120px 100px;
+            grid-template-columns: 40px 60px 1fr 140px 140px;
             align-items: center;
             background: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 6px;
-            padding: 8px 12px;
+            padding: 8px 15px;
             transition: 0.2s;
+            gap: 10px;
         }
 
         .item-row:hover { border-color: #555; background: #202020; }
@@ -92,30 +93,30 @@
 
         .item-icon { width: 45px; height: 45px; object-fit: contain; }
 
-        .item-info { padding: 0 10px; overflow: hidden; }
+        .item-info { overflow: hidden; }
         .item-name { font-size: 0.9em; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .item-category { font-size: 0.7em; color: #666; margin-top: 2px; }
 
-        .item-price {
-            text-align: right;
-            font-weight: bold;
-            color: var(--success);
-            font-family: monospace;
-            font-size: 1.1em;
+        .price-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
         }
 
-        .label-mobile { display: none; }
+        .price-label { font-size: 0.65em; color: #666; margin-bottom: 2px; text-transform: uppercase; }
+        .flea-price { color: var(--success); font-weight: bold; font-family: monospace; font-size: 1.1em; }
+        .trader-price { color: #aaa; font-weight: bold; font-family: monospace; font-size: 1.1em; }
+        .trader-high { color: var(--warning); text-shadow: 0 0 5px rgba(255, 202, 40, 0.3); }
 
-        @media (max-width: 600px) {
-            .item-row { grid-template-columns: 30px 50px 1fr 90px; }
-            .item-category { display: none; }
-            .item-price { font-size: 0.9em; }
+        @media (max-width: 750px) {
+            .item-row { grid-template-columns: 35px 50px 1fr 100px; }
+            .trader-col { display: none; } /* スマホでは店売り列を隠す */
         }
     </style>
 </head>
 <body>
 
-    <h1>EFT MARKET</h1>
+    <h1>EFT MARKET TRACKER</h1>
 
     <div class="controls">
         <div class="row">
@@ -128,10 +129,10 @@
         
         <div class="row">
             <select id="sortSelect">
-                <option value="price_desc">値段が高い順</option>
-                <option value="price_asc">値段が安い順</option>
+                <option value="price_desc">フリマ価格が高い順</option>
+                <option value="price_asc">フリマ価格が安い順</option>
+                <option value="trader_desc">店売りが高い順</option>
                 <option value="category">カテゴリー順</option>
-                <option value="name">名前順</option>
             </select>
             <button id="favFilterBtn" class="btn btn-fav">★ お気に入り</button>
         </div>
@@ -148,10 +149,10 @@
 
         async function loadData() {
             const listDiv = document.getElementById('itemList');
-            listDiv.innerHTML = '<div style="text-align:center">Loading...</div>';
+            listDiv.innerHTML = '<div style="text-align:center; padding: 20px;">データを読み込み中...</div>';
 
             try {
-                // data-xxx.json と list-xxx.json を両方取得してカテゴリー情報を補完する
+                // data.json(履歴・最新価格) と list.json(カテゴリー・店売り詳細) を取得
                 const [dataRes, listRes] = await Promise.all([
                     fetch(`data-${currentMode}.json`),
                     fetch(`list-${currentMode}.json`)
@@ -160,21 +161,27 @@
                 const dataJson = await dataRes.json();
                 const listJson = await listRes.json();
 
-                // list側のカテゴリー情報をIDで引けるようにマップ化
-                const categoryMap = {};
-                listJson.items.forEach(i => categoryMap[i.id] = i.category);
+                // list.jsonから詳細情報を引き出せるようにマップ化
+                const infoMap = {};
+                listJson.items.forEach(i => infoMap[i.id] = i);
 
-                allItems = Object.entries(dataJson.data).map(([id, info]) => ({
-                    id: id,
-                    name: info.n,
-                    price: info.cp,
-                    category: categoryMap[id] || "その他",
-                    img: `https://assets.tarkov.dev/${id}-512.webp`
-                }));
+                allItems = Object.entries(dataJson.data).map(([id, info]) => {
+                    const detail = infoMap[id] || {};
+                    return {
+                        id: id,
+                        name: info.n,
+                        fleaPrice: info.cp || 0,
+                        traderPrice: detail.bestTraderPrice || 0,
+                        traderName: detail.bestTraderName || "---",
+                        category: detail.category || "その他",
+                        img: `https://assets.tarkov.dev/${id}-512.webp`
+                    };
+                });
 
                 render();
             } catch (e) {
-                listDiv.innerHTML = "エラー: データの読み込みに失敗しました。";
+                console.error(e);
+                listDiv.innerHTML = `<div style="text-align:center; color:red;">エラー: データの読み込みに失敗しました。<br>GitHub Actionsが完了しているか確認してください。</div>`;
             }
         }
 
@@ -185,39 +192,49 @@
             
             listDiv.innerHTML = '';
 
-            // フィルタ
             let filtered = allItems.filter(item => {
                 const isFav = favorites.includes(item.id);
                 const matchSearch = item.name.toLowerCase().includes(query);
                 return (showOnlyFav ? isFav : true) && matchSearch;
             });
 
-            // 並び替え
+            // 並び替えロジック
             filtered.sort((a, b) => {
-                // まずはお気に入り最優先
+                // お気に入り設定されているものを最優先
                 const aFav = favorites.includes(a.id) ? 1 : 0;
                 const bFav = favorites.includes(b.id) ? 1 : 0;
                 if (aFav !== bFav) return bFav - aFav;
 
-                if (sortVal === 'price_desc') return b.price - a.price;
-                if (sortVal === 'price_asc') return a.price - b.price;
+                if (sortVal === 'price_desc') return b.fleaPrice - a.fleaPrice;
+                if (sortVal === 'price_asc') return a.fleaPrice - b.fleaPrice;
+                if (sortVal === 'trader_desc') return b.traderPrice - a.traderPrice;
                 if (sortVal === 'category') return a.category.localeCompare(b.category);
-                if (sortVal === 'name') return a.name.localeCompare(b.name);
                 return 0;
             });
 
             filtered.forEach(item => {
                 const isFav = favorites.includes(item.id);
+                const isTraderBetter = item.traderPrice > item.fleaPrice;
+                
                 const row = document.createElement('div');
                 row.className = 'item-row';
                 row.innerHTML = `
                     <div class="fav-star ${isFav ? 'active' : ''}">★</div>
                     <img class="item-icon" src="${item.img}" loading="lazy" onerror="this.src='https://via.placeholder.com/45?text=?'">
                     <div class="item-info">
-                        <div class="item-name">${item.name}</div>
+                        <div class="item-name" title="${item.name}">${item.name}</div>
                         <div class="item-category">${item.category}</div>
                     </div>
-                    <div class="item-price">${item.price.toLocaleString()} ₽</div>
+                    <div class="price-group">
+                        <span class="price-label">Flea Market</span>
+                        <span class="flea-price">${item.fleaPrice.toLocaleString()} ₽</span>
+                    </div>
+                    <div class="price-group trader-col">
+                        <span class="price-label">${item.traderName}</span>
+                        <span class="trader-price ${isTraderBetter ? 'trader-high' : ''}">
+                            ${item.traderPrice.toLocaleString()} ₽
+                        </span>
+                    </div>
                 `;
 
                 row.querySelector('.fav-star').onclick = () => toggleFav(item.id);
