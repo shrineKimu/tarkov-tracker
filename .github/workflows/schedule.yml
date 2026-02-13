@@ -1,39 +1,9 @@
-name: Tarkov Price Logger
-on:
-  schedule:
-    - cron: '*/15 * * * *'  # 5分だと画像処理が追いつかない可能性があるので15分を推奨
-  workflow_dispatch:
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Run collector
-        run: node collect.js
-
-      - name: Commit and Push
-        run: |
-          git config user.name "Auto-Logger"
-          git config user.email "actions@github.com"
-          
-          # 新しく増えた画像も含めてすべてをステージング
-          git add data-pvp.json data-pve.json list-pvp.json list-pve.json
-          
-          # imagesフォルダが存在する場合のみaddを実行
-          if [ -d "images" ]; then
-            git add images/*.png
-          fi
-          
-          # 変更がある場合のみコミット
-          if ! git diff --cached --quiet; then
-            git commit -m "Update list, data and images [skip ci]"
-            git push
-          else
-            echo "No changes to commit"
-          fi
+- name: Commit and Push
+  run: |
+    git config user.name "Auto-Logger"
+    git config user.email "actions@github.com"
+    git add data-pvp.json data-pve.json list-pvp.json list-pve.json
+    if ! git diff --cached --quiet; then
+      git commit -m "Update list and data [skip ci]"
+      git push
+    fi
