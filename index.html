@@ -7,21 +7,54 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root { --bg: #0b0b0b; --card: #161616; --accent: #ffae00; --text: #f0f0f0; --border: #333; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        .status-bar { background: #000; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        /* 画面全体の高さを固定してスクロールを制御 */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+        
+        .status-bar { 
+            height: 50px;
+            background: #000; 
+            padding: 0 20px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid var(--border); 
+            flex-shrink: 0;
+        }
+
         .mode-switch { display: flex; background: var(--card); padding: 4px; border-radius: 8px; }
         .mode-btn { padding: 6px 15px; border: none; border-radius: 4px; cursor: pointer; color: #666; background: transparent; }
         .mode-btn.active { background: var(--accent); color: #000; font-weight: bold; }
 
-        .main-content { display: grid; grid-template-columns: 320px 1fr; flex: 1; overflow: hidden; }
+        .main-content { 
+            display: grid; 
+            grid-template-columns: 320px 1fr; 
+            flex: 1; 
+            overflow: hidden; /* 親要素でのスクロールを禁止 */
+        }
 
-        /* 左：リスト */
-        .sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; background: #0f0f0f; }
-        .filter-section { padding: 15px; border-bottom: 1px solid var(--border); }
+        /* 左：リスト（ここがスクロールするように修正） */
+        .sidebar { 
+            border-right: 1px solid var(--border); 
+            display: flex; 
+            flex-direction: column; 
+            background: #0f0f0f; 
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .filter-section { padding: 15px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
         input, select { width: 100%; background: var(--card); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 10px; box-sizing: border-box; }
         
-        /* お気に入りフィルターの並び修正 */
         .fav-filter-label {
             display: flex;
             align-items: center;
@@ -31,21 +64,23 @@
             cursor: pointer;
             margin-top: 5px;
         }
-        .fav-filter-label input {
-            width: auto !important;
-            margin: 0 !important;
-            cursor: pointer;
+        .fav-filter-label input { width: auto !important; margin: 0 !important; cursor: pointer; }
+
+        .item-list { 
+            overflow-y: auto; /* 縦スクロールを有効化 */
+            flex: 1; 
+            min-height: 0; /* flex内のスクロールを機能させるための魔法 */
         }
 
-        .item-list { overflow-y: auto; flex: 1; }
         .item-row { padding: 10px 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; align-items: center; gap: 10px; }
         .item-row:hover { background: #1a1a1a; }
-        .item-row img { width: 32px; height: 32px; background: #222; border-radius: 4px; }
+        .item-row img { width: 32px; height: 32px; background: #222; border-radius: 4px; flex-shrink: 0; }
+        .item-row span { font-size: 12px; flex: 1; }
         .fav-star { color: #444; margin-left: auto; font-size: 18px; }
         .fav-star.active { color: var(--accent); }
 
         /* 右：詳細 */
-        .detail-view { padding: 20px; overflow-y: auto; position: relative; }
+        .detail-view { padding: 20px; overflow-y: auto; position: relative; height: 100%; box-sizing: border-box; }
         .loading-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7); display:none; justify-content: center; align-items: center; z-index: 10; }
         .detail-header { display: grid; grid-template-columns: 140px 1fr; gap: 20px; margin-bottom: 20px; }
         .big-icon { width: 140px; height: 140px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; object-fit: contain; }
@@ -55,7 +90,7 @@
         
         .chart-box { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 20px; height: 400px; margin-top: 20px; }
         
-        @media (max-width: 768px) { .main-content { grid-template-columns: 1fr; } .sidebar { display: none; } .sidebar.active { display: flex; position: absolute; z-index: 20; width: 100%; height: 100%; } }
+        @media (max-width: 768px) { .main-content { grid-template-columns: 1fr; } .sidebar { display: none; } }
     </style>
 </head>
 <body>
@@ -101,11 +136,12 @@
 </div>
 
 <script>
-    let currentItems = []; // 軽量リスト用
-    let fullHistory = [];  // 巨大な履歴用（必要な時だけロード）
+    let currentItems = []; 
+    let fullHistory = [];  
     let currentMode = 'pvp';
     let chart = null;
     let favorites = JSON.parse(localStorage.getItem('eft_favs') || '[]');
+    let selectedItemId = null; // 現在選んでいるアイテムIDを記憶
 
     const categoryList = ["アサルトカービン", "アサルトライフル", "インスリン", "キーカード", "サブマシンガン", "ショットガン", "スナイパーライフル", "ピストル", "マークスマンライフル", "マシンガン", "ライトマシンガン", "リボルバー", "医療品", "弾薬", "食料", "鍵"];
     const trans = { "Arm Band": "腕章", "Armor Plate": "アーマープレート", "Auxiliary Mod": "補助パーツ", "Compass": "コンパス", "Face Cover": "フェイスカバー", "Fuel": "燃料", "Headwear": "ヘッドウェア", "Keycard": "キーカード", "Mechanical Key": "メカニカルキー", "Repair Kits": "修理キット", "Stimulant": "注入器(スティム)", "Thermal Vision": "サーマルビジョン" };
@@ -122,6 +158,11 @@
         
         fullHistory = []; 
         renderList();
+
+        // モード切替時にアイテムを選択中なら、新しいモードのデータで再描画
+        if (selectedItemId) {
+            showDetail(selectedItemId);
+        }
     }
 
     function renderList() {
@@ -136,15 +177,17 @@
             return i.name.toLowerCase().includes(search) && (!cat || cName === cat) && (!favOnly || isFav);
         });
 
+        // スクロール負荷を減らすため100件表示
         listDiv.innerHTML = filtered.slice(0, 100).map(i => `
             <div class="item-row" onclick="showDetail('${i.id}')">
                 <img src="images/${i.id}.png" loading="lazy">
-                <span style="font-size:12px">${i.name}</span>
+                <span>${i.name}</span>
                 <span class="fav-star ${favorites.includes(i.id)?'active':''}" onclick="toggleFav('${i.id}', event)">★</span>
             </div>`).join('');
     }
 
     async function showDetail(id) {
+        selectedItemId = id; // IDを保存
         document.getElementById('detailView').style.display = 'block';
         
         if (fullHistory.length === 0) {
