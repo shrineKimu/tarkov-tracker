@@ -188,52 +188,52 @@ const categoryList = [
 ];
 
 // 英語で入ってきているカテゴリ名を日本語に変換するためのマップ
+// 英語のカテゴリ名を日本語に変換するマップ（漏れがないよう強化）
 const trans = { 
-    "Mechanical Key": "鍵", 
-    "Keycard": "キーカード",
-    "Armor": "アーマー",
-    "Headwear": "ヘッドウェア",
-    "Face Cover": "フェイスカバー",
-    "Backpack": "バックパック",
-    "Tactical Rig": "チェストリグ",
-    "Medical Supplies": "医療品",
-    "Medication": "薬",
-    "Food": "食料",
-    "Drink": "飲料",
-    "Ammo": "弾薬",
-    "Ammo Container": "弾薬コンテナ",
-    "Magazine": "マガジン",
-    "Handgun": "ハンドガン",
-    "Assault Rifle": "アサルトライフル",
-    "Shotgun": "ショットガン",
-    "Grenade": "投擲武器",
-    "Melee": "ナイフ",
-    "Container": "コンテナ",
-    "Info Item": "情報アイテム",
-    "Special Item": "特殊アイテム",
-    "Map": "マップ",
-    "Stimulant": "注入器(スティム)",
-    "Repair Kits": "修理キット",
-    "Fuel": "燃料"
+    "Mechanical Key": "鍵", "Keycard": "キーカード", "Armor": "アーマー",
+    "Armor Plate": "アーマープレート", "Headwear": "ヘッドウェア", 
+    "Face Cover": "フェイスカバー", "Backpack": "バックパック",
+    "Tactical Rig": "チェストリグ", "Medical Supplies": "医療品",
+    "Medication": "薬", "Food": "食料", "Drink": "飲料",
+    "Ammo": "弾薬", "Ammo Container": "弾薬箱",
+    "Magazine": "マガジン", "Handgun": "ハンドガン",
+    "Assault Rifle": "アサルトライフル", "Shotgun": "ショットガン",
+    "Grenade": "投擲武器", "Melee": "ナイフ", "Container": "コンテナ",
+    "Info Item": "情報アイテム", "Special Item": "特殊アイテム",
+    "Map": "マップ", "Stimulant": "注入器(スティム)",
+    "Repair Kits": "修理キット", "Fuel": "燃料", "Auxiliary Mod": "補助パーツ"
 };
 
     async function init() {
-        const res = await fetch(`list-${currentMode}.json`);
-        const data = await res.json();
-        currentItems = data.items;
-        document.getElementById('lastUpdate').innerText = new Date(data.time).toLocaleString();
-        
-        const sel = document.getElementById('catSelect');
-        sel.innerHTML = '<option value="">すべてのカテゴリ</option>';
-        categoryList.sort().forEach(c => sel.innerHTML += `<option value="${c}">${c}</option>`);
-        
-        fullHistory = []; 
-        renderList();
+    const res = await fetch(`list-${currentMode}.json`);
+    const data = await res.json();
+    currentItems = data.items;
+    document.getElementById('lastUpdate').innerText = new Date(data.time).toLocaleString();
+    
+    // --- ここから修正：カテゴリを動的に生成 ---
+    const cats = new Set();
+    currentItems.forEach(i => {
+        // 翻訳があれば日本語、なければ元の名前、それもなければ「その他」
+        const cName = trans[i.category?.name] || i.category?.name || "その他";
+        cats.add(cName);
+    });
+    
+    const sel = document.getElementById('catSelect');
+    sel.innerHTML = '<option value="">すべてのカテゴリ</option>';
+    
+    // アルファベット順（あいうえお順）に並べてセレクトボックスに追加
+    Array.from(cats).sort().forEach(c => {
+        sel.innerHTML += `<option value="${c}">${c}</option>`;
+    });
+    // --- ここまで ---
+    
+    fullHistory = []; 
+    renderList();
 
-        if (selectedItemId) {
-            showDetail(selectedItemId);
-        }
+    if (selectedItemId) {
+        showDetail(selectedItemId);
     }
+}
 
     function renderList() {
         const search = document.getElementById('searchInput').value.toLowerCase();
