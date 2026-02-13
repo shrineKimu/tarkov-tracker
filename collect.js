@@ -18,6 +18,7 @@ async function collect() {
         const result = await response.json();
         const timestamp = new Date().toISOString();
         
+        // PvPとPvEを分けて保存する
         const newData = { 
             time: timestamp, 
             pvp: result.data.pvp.filter(i => i.lastLowPrice > 0),
@@ -32,6 +33,7 @@ async function collect() {
         if (history.length > 2016) history.shift();
 
         fs.writeFileSync('data.json', JSON.stringify(history, null, 2));
+        console.log("PvP/PvE両方の取得に成功しました");
     } catch (e) {
         console.error(e);
         process.exit(1);
