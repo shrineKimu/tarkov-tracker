@@ -47,10 +47,10 @@
             <canvas id="priceChart"></canvas>
         </div>
     </div>
-
+    
     <script>
-        let items = [];         // list-xxx.json の中身
-        let historyStore = {};  // data-xxx.json の中身 (一度読み込んだら保持)
+        let items = [];         
+        let historyStore = {};  
         let currentMode = 'pvp';
         let chart = null;
 
@@ -60,24 +60,33 @@
 
         async function changeMode(mode) {
             currentMode = mode;
-            historyStore = {}; // モードが変わったら履歴キャッシュをクリア
+            // モード切替時に履歴キャッシュをリセット
+            historyStore = {}; 
             
             try {
                 const res = await fetch(`list-${mode}.json`);
                 const data = await res.json();
-                items = data.items;
+                items = data.items; //
                 document.getElementById('updateTime').innerText = `最終更新: ${new Date(data.time).toLocaleString()}`;
 
-                // カテゴリ一覧の作成
+                // カテゴリ生成
                 const cats = [...new Set(items.map(i => i.category))].sort();
                 const catSelect = document.getElementById('categorySelect');
                 catSelect.innerHTML = '<option value="">すべてのカテゴリ</option>' + 
                     cats.map(c => `<option value="${c}">${c}</option>`).join('');
 
+                // 最初に一度データファイルを読み込んで価格を表示させる
+                await loadPriceData();
                 render();
             } catch (e) {
-                console.error("データの読み込みに失敗しました", e);
+                console.error("データロード失敗", e);
             }
+        }
+
+        async function loadPriceData() {
+            const res = await fetch(`data-${currentMode}.json`);
+            const json = await res.json();
+            historyStore = json.data; //
         }
 
         function render() {
@@ -91,24 +100,25 @@
                 return matchName && matchCat;
             });
 
-            // 1マス単価の高い順に並び替え
+            // フリマ最低価格(cp)に基づいた「1マス単価」で降順ソート
             filtered.sort((a, b) => {
                 const priceA = historyStore[a.id]?.cp || 0;
                 const priceB = historyStore[b.id]?.cp || 0;
-                return (priceB / b.slots) - (priceA / a.slots);
+                const perSlotA = priceA / (a.slots || 1);
+                const perSlotB = priceB / (b.slots || 1);
+                return perSlotB - perSlotA;
             });
 
             listEl.innerHTML = filtered.map(i => {
-                // historyStoreに最新価格があれば表示、なければ「詳細を表示」
-                const price = historyStore[i.id]?.cp || "---";
-                const perSlot = price !== "---" ? Math.floor(price / i.slots).toLocaleString() : "??";
+                const price = historyStore[i.id]?.cp || 0;
+                const perSlot = Math.floor(price / (i.slots || 1));
                 
                 return `
                 <div class="item-card" onclick="showDetail('${i.id}')">
                     <img src="${i.img}" alt="">
                     <div class="item-name">${i.name}</div>
-                    <div class="item-price">${price.toLocaleString()} ₽</div>
-                    <div class="per-slot">1マス: ${perSlot} ₽</div>
+                    <div class="item-price" style="color: #ffca28;">最低: ${price.toLocaleString()} ₽</div>
+                    <div class="per-slot">1マス: ${perSlot.toLocaleString()} ₽</div>
                 </div>`;
             }).join('');
         }
@@ -119,56 +129,41 @@
             modal.style.display = 'block';
             document.getElementById('modalTitle').innerText = item.name;
 
-            // 履歴データの読み込み（まだ持っていなければ）
-            if (Object.keys(historyStore).length === 0) {
-                const res = await fetch(`data-${currentMode}.json`);
-                const json = await res.json();
-                historyStore = json.data;
-                render(); // メイン一覧の価格表示を更新
-            }
-
+            // 履歴(h)からグラフを作成
             const history = historyStore[id]?.h || [];
             
-            // スペック情報の表示
-            let infoText = `カテゴリ: ${item.category} | サイズ: ${item.slots}マス | 店売り: ${item.bestTraderPrice.toLocaleString()} ₽ (${item.bestTraderName})`;
-            if (item.props.damage) infoText += `<br>ダメージ: ${item.props.damage} | 貫通力: ${item.props.penetrationPower}`;
-            if (item.props.class) infoText += `<br>アーマークラス: ${item.props.class} | 耐久値: ${item.props.durability}`;
+            let infoText = `サイズ: ${item.slots}マス | 店売り最高: ${item.bestTraderPrice.toLocaleString()} ₽ (${item.bestTraderName})`;
+            if (item.props.damage) infoText += `<br>弾薬性能: ダメージ ${item.props.damage} / 貫通 ${item.props.penetrationPower}`;
             document.getElementById('modalInfo').innerHTML = infoText;
 
-            // グラフ描画
             const ctx = document.getElementById('priceChart').getContext('2d');
             if (chart) chart.destroy();
 
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: history.map(h => new Date(h.t).toLocaleString()),
+                    labels: history.map(h => new Date(h.t).toLocaleTimeString()),
                     datasets: [{
-                        label: 'Flea Market Price',
+                        label: 'フリマ最低価格推移',
                         data: history.map(h => h.p),
-                        borderColor: '#007bff',
-                        tension: 0.1,
-                        fill: false
+                        borderColor: '#ffca28',
+                        backgroundColor: 'rgba(255, 202, 40, 0.1)',
+                        fill: true,
+                        tension: 0.3
                     }]
                 },
                 options: {
                     responsive: true,
+                    plugins: { legend: { labels: { color: '#fff' } } },
                     scales: {
-                        y: { beginAtZero: false, grid: { color: '#444' } },
-                        x: { grid: { display: false } }
+                        y: { grid: { color: '#333' }, ticks: { color: '#aaa' } },
+                        x: { grid: { display: false }, ticks: { color: '#aaa' } }
                     }
                 }
             });
         }
 
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
-        }
-
-        window.onclick = (event) => {
-            if (event.target == document.getElementById('modal')) closeModal();
-        };
-
+        function closeModal() { document.getElementById('modal').style.display = 'none'; }
         init();
     </script>
 </body>
