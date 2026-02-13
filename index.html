@@ -2,24 +2,42 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>EFT価格推移トラッカー</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EFT相場トラッカー Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: #ddd; margin: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        select { background: #333; color: white; padding: 10px; width: 100%; margin-bottom: 20px; border-radius: 5px; }
-        .chart-container { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; }
-        canvas { width: 100% !important; height: 400px !important; }
+        :root { --bg: #121212; --card: #1e1e1e; --accent: #ffae00; --text: #e0e0e0; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        input, select { background: var(--card); color: white; border: 1px solid #444; padding: 12px; border-radius: 6px; font-size: 14px; }
+        .mode-switch { display: flex; gap: 5px; background: var(--card); padding: 5px; border-radius: 6px; grid-column: span 3; }
+        .mode-btn { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #888; transition: 0.3s; }
+        .mode-btn.active { background: var(--accent); color: black; font-weight: bold; }
+        .chart-container { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h1 { font-size: 24px; color: var(--accent); margin-top: 0; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>EFT 価格推移 (過去7日間)</h1>
-        <p>アイテムを選択すると推移グラフが表示されます</p>
-        
-        <select id="itemSelect" onchange="updateChart()">
-            <option value="">アイテムを読み込み中...</option>
-        </select>
+        <h1>EFT 相場トラッカー</h1>
+
+        <div class="controls">
+            <div class="mode-switch">
+                <button id="pvpBtn" class="mode-btn active" onclick="setMode('regular')">PvP (通常)</button>
+                <button id="pveBtn" class="mode-btn" onclick="setMode('pve')">PvE (モード)</button>
+            </div>
+            
+            <input type="text" id="searchInput" placeholder="アイテム名で検索..." oninput="filterItems()">
+            
+            <select id="categorySelect" onchange="filterItems()">
+                <option value="">すべてのカテゴリ</option>
+            </select>
+
+            <select id="itemSelect" onchange="updateChart()">
+                <option value="">アイテムを選択</option>
+            </select>
+        </div>
 
         <div class="chart-container">
             <canvas id="priceChart"></canvas>
@@ -29,36 +47,60 @@
     <script>
         let historyData = [];
         let myChart = null;
+        let currentMode = 'regular'; // default PvP
 
-        // 1. 貯まったJSONデータを読み込む
         async function loadData() {
-            try {
-                const response = await fetch('data.json');
-                historyData = await response.json();
-                populateSelect();
-            } catch (e) {
-                console.error("データ読み込み失敗:", e);
-            }
+            const response = await fetch('data.json');
+            historyData = await response.json();
+            initFilters();
         }
 
-        // 2. セレクトボックスにアイテム名を並べる
-        function populateSelect() {
-            const select = document.getElementById('itemSelect');
-            select.innerHTML = '<option value="">アイテムを選択してください</option>';
-            
-            // 最新のデータからアイテムリストを作成
-            const latestItems = historyData[historyData.length - 1].items;
-            latestItems.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+        function initFilters() {
+            const categories = new Set();
+            const latestEntry = historyData[historyData.length - 1];
+            latestEntry.items.forEach(item => {
+                if(item.category?.name) categories.add(item.category.name);
+            });
 
-            latestItems.forEach(item => {
+            const catSelect = document.getElementById('categorySelect');
+            Array.from(categories).sort().forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                catSelect.appendChild(opt);
+            });
+            filterItems();
+        }
+
+        function filterItems() {
+            const searchText = document.getElementById('searchInput').value.toLowerCase();
+            const category = document.getElementById('categorySelect').value;
+            const itemSelect = document.getElementById('itemSelect');
+            
+            const latestItems = historyData[historyData.length - 1].items;
+            const filtered = latestItems.filter(item => {
+                const matchName = item.name.toLowerCase().includes(searchText);
+                const matchCat = !category || item.category?.name === category;
+                return matchName && matchCat;
+            });
+
+            itemSelect.innerHTML = '<option value="">アイテムを選択 (' + filtered.length + '件)</option>';
+            filtered.sort((a,b) => a.name.localeCompare(b.name, 'ja')).forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.id;
                 opt.textContent = item.name;
-                select.appendChild(opt);
+                itemSelect.appendChild(opt);
             });
         }
 
-        // 3. 選択されたアイテムのグラフを描く
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('pvpBtn').classList.toggle('active', mode === 'regular');
+            document.getElementById('pveBtn').classList.toggle('active', mode === 'pve');
+            // データ収集側がPvEに対応したらここを反映（現在はPvPのみ収集）
+            alert("※現在データ収集側がPvPのみのため、表示は切り替わりません。収集側の修正が必要です。");
+        }
+
         function updateChart() {
             const itemId = document.getElementById('itemSelect').value;
             if (!itemId) return;
@@ -66,43 +108,36 @@
             const labels = [];
             const prices = [];
 
-            // 全履歴からそのアイテムの価格だけを抜き出す
             historyData.forEach(entry => {
                 const item = entry.items.find(i => i.id === itemId);
                 if (item) {
                     const date = new Date(entry.time);
-                    labels.push(date.toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+                    labels.push(date.toLocaleString('ja-JP', { month:'short', day:'2-digit', hour: '2-digit', minute: '2-digit' }));
                     prices.push(item.lastLowPrice);
                 }
             });
 
-            if (myChart) myChart.destroy(); // 古いグラフを消す
-
+            if (myChart) myChart.destroy();
             const ctx = document.getElementById('priceChart').getContext('2d');
             myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: '最安価格 (₽)',
+                        label: '価格 (₽)',
                         data: prices,
                         borderColor: '#ffae00',
-                        backgroundColor: 'rgba(255, 174, 0, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3
+                        tension: 0.2,
+                        pointRadius: 2
                     }]
                 },
                 options: {
                     responsive: true,
-                    scales: {
-                        y: { beginAtZero: false, grid: { color: '#444' } },
-                        x: { grid: { color: '#444' } }
-                    }
+                    plugins: { legend: { display: false } },
+                    scales: { y: { grid: { color: '#333' } }, x: { grid: { display: false } } }
                 }
             });
         }
-
         loadData();
     </script>
 </body>
