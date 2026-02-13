@@ -19,13 +19,10 @@
             overflow: hidden; 
         }
         
-        /* スクロールバーのカスタマイズ */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #000; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-        
-        /* Firefox用 */
         * { scrollbar-width: thin; scrollbar-color: #333 #000; }
 
         .status-bar { 
@@ -113,7 +110,7 @@
 
         @media (max-width: 900px) { 
             .main-content { grid-template-columns: 1fr; }
-            .sidebar { display: none; } /* モバイル対応は今後検討 */
+            .sidebar { display: none; }
         }
     </style>
 </head>
@@ -179,47 +176,48 @@
     let favorites = JSON.parse(localStorage.getItem('eft_favs') || '[]');
     let selectedItemId = null;
 
-    // 実データから抽出した主要な日本語カテゴリリスト
-const categoryList = [
-    "鍵", 
-];
+    // --- 【設定1】カテゴリ名を翻訳・統合するリスト ---
+    const trans = { 
+        "Mechanical Key": "鍵",
+    };
 
-// 英語で入ってきているカテゴリ名を日本語に変換するためのマップ
-// 英語のカテゴリ名を日本語に変換するマップ（漏れがないよう強化）
-const trans = { 
-    "Mechanical Key": "鍵", 
-};
+    // --- 【設定2】特定のアイテム名だけカテゴリを強制上書きするリスト ---
+    const itemOverride = {
+        "TerraGroup Labs access keycard": "キーカード",
+    };
 
     async function init() {
-    const res = await fetch(`list-${currentMode}.json`);
-    const data = await res.json();
-    currentItems = data.items;
-    document.getElementById('lastUpdate').innerText = new Date(data.time).toLocaleString();
-    
-    // --- ここから修正：カテゴリを動的に生成 ---
-    const cats = new Set();
-    currentItems.forEach(i => {
-        // 翻訳があれば日本語、なければ元の名前、それもなければ「その他」
-        const cName = trans[i.category?.name] || i.category?.name || "その他";
-        cats.add(cName);
-    });
-    
-    const sel = document.getElementById('catSelect');
-    sel.innerHTML = '<option value="">すべてのカテゴリ</option>';
-    
-    // アルファベット順（あいうえお順）に並べてセレクトボックスに追加
-    Array.from(cats).sort().forEach(c => {
-        sel.innerHTML += `<option value="${c}">${c}</option>`;
-    });
-    // --- ここまで ---
-    
-    fullHistory = []; 
-    renderList();
+        const res = await fetch(`list-${currentMode}.json`);
+        const data = await res.json();
+        currentItems = data.items;
+        document.getElementById('lastUpdate').innerText = new Date(data.time).toLocaleString();
+        
+        const cats = new Set();
+        
+        currentItems.forEach(i => {
+            // 優先度：アイテム名上書き > カテゴリ名翻訳 > 生データ
+            const cName = itemOverride[i.name] || trans[i.category?.name] || i.category?.name || "その他";
+            
+            // アイテムオブジェクトに「決定したカテゴリ名」を保存しておく
+            i.dispCat = cName;
+            cats.add(cName);
+        });
+        
+        const sel = document.getElementById('catSelect');
+        sel.innerHTML = '<option value="">すべてのカテゴリ</option>';
+        
+        // カテゴリ一覧を五十音順に並び替えてセレクトボックスに追加
+        Array.from(cats).sort().forEach(c => {
+            sel.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+        
+        fullHistory = []; 
+        renderList();
 
-    if (selectedItemId) {
-        showDetail(selectedItemId);
+        if (selectedItemId) {
+            showDetail(selectedItemId);
+        }
     }
-}
 
     function renderList() {
         const search = document.getElementById('searchInput').value.toLowerCase();
@@ -228,9 +226,13 @@ const trans = {
         const listDiv = document.getElementById('itemList');
         
         const filtered = currentItems.filter(i => {
-            const cName = trans[i.category?.name] || i.category?.name || "その他";
             const isFav = favorites.includes(i.id);
-            return i.name.toLowerCase().includes(search) && (!cat || cName === cat) && (!favOnly || isFav);
+            const isMatchSearch = i.name.toLowerCase().includes(search);
+            // initで決めた i.dispCat を使って判定
+            const isMatchCat = (!cat || i.dispCat === cat);
+            const isMatchFav = (!favOnly || isFav);
+            
+            return isMatchSearch && isMatchCat && isMatchFav;
         });
 
         listDiv.innerHTML = filtered.slice(0, 100).map(i => `
