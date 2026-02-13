@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>EFT価格推移トラッカー</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: #ddd; margin: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        select { background: #333; color: white; padding: 10px; width: 100%; margin-bottom: 20px; border-radius: 5px; }
+        .chart-container { background: #2a2a2a; padding: 20px; border-radius: 10px; border: 1px solid #444; }
+        canvas { width: 100% !important; height: 400px !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>EFT 価格推移 (過去7日間)</h1>
+        <p>アイテムを選択すると推移グラフが表示されます</p>
+        
+        <select id="itemSelect" onchange="updateChart()">
+            <option value="">アイテムを読み込み中...</option>
+        </select>
+
+        <div class="chart-container">
+            <canvas id="priceChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let historyData = [];
+        let myChart = null;
+
+        // 1. 貯まったJSONデータを読み込む
+        async function loadData() {
+            try {
+                const response = await fetch('data.json');
+                historyData = await response.json();
+                populateSelect();
+            } catch (e) {
+                console.error("データ読み込み失敗:", e);
+            }
+        }
+
+        // 2. セレクトボックスにアイテム名を並べる
+        function populateSelect() {
+            const select = document.getElementById('itemSelect');
+            select.innerHTML = '<option value="">アイテムを選択してください</option>';
+            
+            // 最新のデータからアイテムリストを作成
+            const latestItems = historyData[historyData.length - 1].items;
+            latestItems.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+
+            latestItems.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.name;
+                select.appendChild(opt);
+            });
+        }
+
+        // 3. 選択されたアイテムのグラフを描く
+        function updateChart() {
+            const itemId = document.getElementById('itemSelect').value;
+            if (!itemId) return;
+
+            const labels = [];
+            const prices = [];
+
+            // 全履歴からそのアイテムの価格だけを抜き出す
+            historyData.forEach(entry => {
+                const item = entry.items.find(i => i.id === itemId);
+                if (item) {
+                    const date = new Date(entry.time);
+                    labels.push(date.toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+                    prices.push(item.lastLowPrice);
+                }
+            });
+
+            if (myChart) myChart.destroy(); // 古いグラフを消す
+
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '最安価格 (₽)',
+                        data: prices,
+                        borderColor: '#ffae00',
+                        backgroundColor: 'rgba(255, 174, 0, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: false, grid: { color: '#444' } },
+                        x: { grid: { color: '#444' } }
+                    }
+                }
+            });
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
