@@ -72,10 +72,21 @@ async function collect() {
             const specList = items.map(i => {
                 const slots = (i.width || 1) * (i.height || 1);
                 let bestTrader = { price: 0, name: "" };
+
                 if (i.sellFor && i.sellFor.length > 0) {
-                    const best = i.sellFor.reduce((max, curr) => max.price > curr.price ? max : curr);
-                    bestTrader = { price: best.price, name: best.vendor.name };
+                    // フリマを除外して、純粋なトレーダーだけを抽出
+                    const traderPrices = i.sellFor.filter(s => 
+                        s.vendor.name !== 'Marketplace' && 
+                        s.vendor.name !== 'フリーマーケット'
+                    );
+
+                    if (traderPrices.length > 0) {
+                        // トレーダーの中で一番高い価格を探す
+                        const best = traderPrices.reduce((max, curr) => max.price > curr.price ? max : curr);
+                        bestTrader = { price: best.price, name: best.vendor.name };
+                    }
                 }
+
                 return {
                     id: i.id,
                     name: i.name,
