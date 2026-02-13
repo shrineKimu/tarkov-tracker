@@ -7,15 +7,23 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root { --bg: #121212; --card: #1e1e1e; --accent: #ffae00; --text: #e0e0e0; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-        input, select { background: var(--card); color: white; border: 1px solid #444; padding: 12px; border-radius: 6px; font-size: 14px; }
-        .mode-switch { display: flex; gap: 5px; background: var(--card); padding: 5px; border-radius: 6px; grid-column: span 3; }
-        .mode-btn { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #888; transition: 0.3s; }
-        .mode-btn.active { background: var(--accent); color: black; font-weight: bold; }
-        .chart-container { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        h1 { font-size: 24px; color: var(--accent); margin-top: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { font-size: 20px; color: var(--accent); margin: 0 0 15px 0; text-align: center; }
+        
+        /* コントロールエリア */
+        .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+        .mode-switch { display: flex; gap: 5px; background: var(--card); padding: 5px; border-radius: 8px; }
+        .mode-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; background: transparent; color: #888; font-weight: bold; transition: 0.2s; }
+        .mode-btn.active { background: var(--accent); color: black; }
+        
+        .filter-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        input, select { background: var(--card); color: white; border: 1px solid #444; padding: 12px; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box; }
+        input:focus { border-color: var(--accent); outline: none; }
+
+        /* グラフエリア */
+        .chart-container { background: var(--card); padding: 15px; border-radius: 12px; border: 1px solid #333; position: relative; height: 450px; }
+        canvas { width: 100% !important; height: 100% !important; }
     </style>
 </head>
 <body>
@@ -24,18 +32,19 @@
 
         <div class="controls">
             <div class="mode-switch">
-                <button id="pvpBtn" class="mode-btn active" onclick="setMode('regular')">PvP (通常)</button>
+                <button id="pvpBtn" class="mode-btn active" onclick="setMode('pvp')">PvP (通常)</button>
                 <button id="pveBtn" class="mode-btn" onclick="setMode('pve')">PvE (モード)</button>
             </div>
             
-            <input type="text" id="searchInput" placeholder="アイテム名で検索..." oninput="filterItems()">
-            
-            <select id="categorySelect" onchange="filterItems()">
-                <option value="">すべてのカテゴリ</option>
-            </select>
+            <div class="filter-group">
+                <input type="text" id="searchInput" placeholder="アイテム名を検索..." oninput="filterItems()">
+                <select id="categorySelect" onchange="filterItems()">
+                    <option value="">すべてのカテゴリ</option>
+                </select>
+            </div>
 
             <select id="itemSelect" onchange="updateChart()">
-                <option value="">アイテムを選択</option>
+                <option value="">データ読み込み中...</option>
             </select>
         </div>
 
@@ -47,18 +56,29 @@
     <script>
         let historyData = [];
         let myChart = null;
-        let currentMode = 'regular'; // default PvP
+        let currentMode = 'pvp';
 
+        // 1. データ読み込み
         async function loadData() {
-            const response = await fetch('data.json');
-            historyData = await response.json();
-            initFilters();
+            try {
+                const response = await fetch('data.json');
+                historyData = await response.json();
+                
+                // カテゴリ一覧を抽出
+                initCategories();
+                // 選択リストを初期化
+                filterItems();
+            } catch (e) {
+                document.getElementById('itemSelect').innerHTML = '<option>データの取得待ちです...</option>';
+            }
         }
 
-        function initFilters() {
+        function initCategories() {
             const categories = new Set();
-            const latestEntry = historyData[historyData.length - 1];
-            latestEntry.items.forEach(item => {
+            const latest = historyData[historyData.length - 1];
+            // PvP/PvEどちらかにデータがあればカテゴリを拾う
+            const items = latest.pvp || latest.items || []; 
+            items.forEach(item => {
                 if(item.category?.name) categories.add(item.category.name);
             });
 
@@ -69,22 +89,39 @@
                 opt.textContent = cat;
                 catSelect.appendChild(opt);
             });
-            filterItems();
         }
 
+        // 2. モード切り替え
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('pvpBtn').classList.toggle('active', mode === 'pvp');
+            document.getElementById('pveBtn').classList.toggle('active', mode === 'pve');
+            filterItems();
+            updateChart(); // グラフも再描画
+        }
+
+        // 3. アイテム検索・絞り込み
         function filterItems() {
             const searchText = document.getElementById('searchInput').value.toLowerCase();
             const category = document.getElementById('categorySelect').value;
             const itemSelect = document.getElementById('itemSelect');
             
-            const latestItems = historyData[historyData.length - 1].items;
-            const filtered = latestItems.filter(item => {
+            const latest = historyData[historyData.length - 1];
+            // 新形式なら pvp/pve、旧形式なら items を参照
+            let list = [];
+            if (currentMode === 'pve') {
+                list = latest.pve || [];
+            } else {
+                list = latest.pvp || latest.items || [];
+            }
+
+            const filtered = list.filter(item => {
                 const matchName = item.name.toLowerCase().includes(searchText);
                 const matchCat = !category || item.category?.name === category;
                 return matchName && matchCat;
             });
 
-            itemSelect.innerHTML = '<option value="">アイテムを選択 (' + filtered.length + '件)</option>';
+            itemSelect.innerHTML = `<option value="">アイテムを選択 (${filtered.length}件)</option>`;
             filtered.sort((a,b) => a.name.localeCompare(b.name, 'ja')).forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.id;
@@ -93,20 +130,7 @@
             });
         }
 
-        function setMode(mode) {
-            currentMode = mode;
-            // ボタンの見た目を切り替え
-            document.getElementById('pvpBtn').classList.toggle('active', mode === 'regular');
-            document.getElementById('pveBtn').classList.toggle('active', mode === 'pve');
-            
-            // 選択リストとグラフをリセットして更新
-            filterItems();
-            if (myChart) {
-                updateChart(); 
-            }
-        }
-
-        // updateChart関数の中の「find」の部分も少し修正が必要です
+        // 4. グラフ更新
         function updateChart() {
             const itemId = document.getElementById('itemSelect').value;
             if (!itemId) return;
@@ -115,11 +139,10 @@
             const prices = [];
 
             historyData.forEach(entry => {
-                // currentMode (pvp か pve) に合わせてデータを探す
-                const dataList = (currentMode === 'pve') ? entry.pve : entry.pvp;
-                if (!dataList) return; // 古いデータ（PvPしかない時）の対策
+                let list = (currentMode === 'pve') ? entry.pve : (entry.pvp || entry.items);
+                if (!list) return;
 
-                const item = dataList.find(i => i.id === itemId);
+                const item = list.find(i => i.id === itemId);
                 if (item) {
                     const date = new Date(entry.time);
                     labels.push(date.toLocaleString('ja-JP', { month:'short', day:'2-digit', hour: '2-digit', minute: '2-digit' }));
@@ -134,20 +157,28 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: '価格 (₽)',
+                        label: `${currentMode.toUpperCase()} 最安値 (₽)`,
                         data: prices,
                         borderColor: '#ffae00',
+                        backgroundColor: 'rgba(255, 174, 0, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
                         tension: 0.2,
                         pointRadius: 2
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
-                    scales: { y: { grid: { color: '#333' } }, x: { grid: { display: false } } }
+                    scales: {
+                        y: { grid: { color: '#333' }, ticks: { color: '#888' } },
+                        x: { grid: { display: false }, ticks: { color: '#888' } }
+                    }
                 }
             });
         }
+
         loadData();
     </script>
 </body>
