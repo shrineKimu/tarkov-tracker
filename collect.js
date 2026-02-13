@@ -1,4 +1,37 @@
 const fs = require('fs');
+const https = require('https');
+
+// fetchの代わりにNode.js標準のhttpsモジュールを使用する関数
+function post(url, data) {
+    return new Promise((resolve, reject) => {
+        const urlObj = new URL(url);
+        const options = {
+            hostname: urlObj.hostname,
+            path: urlObj.pathname,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Node.js/Tarkov-Tracker'
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                try {
+                    resolve(JSON.parse(body));
+                } catch (e) {
+                    reject(new Error("Invalid JSON response"));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(data);
+        req.end();
+    });
+}
 
 async function collect() {
     const query = JSON.stringify({
@@ -25,28 +58,24 @@ async function collect() {
     });
 
     try {
-        const response = await fetch('https://api.tarkov.dev/graphql', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: query,
-        });
-        const result = await response.json();
+        const result = await post('https://api.tarkov.dev/graphql', query);
         const timestamp = new Date().toISOString();
+
+        if (!result.data) {
+            throw new Error(JSON.stringify(result.errors));
+        }
 
         const updateStorage = (mode, items) => {
             const listFile = `list-${mode}.json`;
             const dataFile = `data-${mode}.json`;
 
-            // 1. スペックリスト作成 (画像はURLのまま)
             const specList = items.map(i => {
                 const slots = (i.width || 1) * (i.height || 1);
-                
                 let bestTrader = { price: 0, name: "" };
                 if (i.sellFor && i.sellFor.length > 0) {
                     const best = i.sellFor.reduce((max, curr) => max.price > curr.price ? max : curr);
                     bestTrader = { price: best.price, name: best.vendor.name };
                 }
-
                 return {
                     id: i.id,
                     name: i.name,
@@ -56,20 +85,17 @@ async function collect() {
                     category: i.category?.name || "その他",
                     bestTraderPrice: bestTrader.price,
                     bestTraderName: bestTrader.name,
-                    img: i.image512pxLink, // URLを直接保持
+                    img: i.image512pxLink,
                     props: i.properties || {}
                 };
             });
 
-            // 2. 価格履歴の更新
             let historyData = {};
             if (fs.existsSync(dataFile)) {
                 try {
                     const raw = fs.readFileSync(dataFile, 'utf8');
                     historyData = JSON.parse(raw).data || {};
-                } catch (e) {
-                    historyData = {};
-                }
+                } catch (e) { historyData = {}; }
             }
 
             items.filter(i => i.lastLowPrice > 0).forEach(i => {
@@ -78,8 +104,6 @@ async function collect() {
                 }
                 historyData[i.id].cp = i.lastLowPrice;
                 historyData[i.id].h.push({ t: timestamp, p: i.lastLowPrice });
-
-                // 7日分（15分×672回）
                 if (historyData[i.id].h.length > 672) {
                     historyData[i.id].h = historyData[i.id].h.slice(-672);
                 }
@@ -91,10 +115,10 @@ async function collect() {
 
         updateStorage('pvp', result.data.pvp);
         updateStorage('pve', result.data.pve);
+        console.log("Success: Data files updated.");
 
-        console.log(`[${new Date().toLocaleTimeString()}] 収集完了 (画像URL参照方式)`);
     } catch (e) {
-        console.error("Error:", e);
+        console.error("Collection Failed:", e.message);
         process.exit(1);
     }
 }
