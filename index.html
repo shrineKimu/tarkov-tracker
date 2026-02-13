@@ -2,168 +2,226 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Tarkov Price Tracker</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EFT Price Tracker Pro</title>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: #eee; margin: 20px; }
-        .controls { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
-        input, select, button { padding: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff; }
-        
-        .item-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
-        .item-card { background: #2a2a2a; padding: 10px; border-radius: 8px; cursor: pointer; transition: 0.2s; border: 1px solid #333; }
-        .item-card:hover { border-color: #007bff; background: #333; }
-        .item-card img { width: 64px; height: 64px; object-fit: contain; display: block; margin: 0 auto 10px; }
-        .item-name { font-size: 0.9em; font-weight: bold; height: 2.8em; overflow: hidden; }
-        .item-price { color: #ffca28; font-size: 1.1em; margin-top: 5px; }
-        .per-slot { font-size: 0.8em; color: #aaa; }
+        :root {
+            --bg-color: #0f0f0f;
+            --card-bg: #1a1a1a;
+            --accent: #e59322; /* タルコフっぽいオレンジ */
+            --text: #e0e0e0;
+            --border: #333;
+        }
 
-        /* モーダル */
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
-        .modal-content { background: #2a2a2a; margin: 5% auto; padding: 20px; width: 90%; max-width: 800px; border-radius: 10px; position: relative; }
-        .close-btn { position: absolute; top: 10px; right: 20px; font-size: 24px; cursor: pointer; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 { text-align: center; color: var(--accent); }
+
+        /* コントロールエリア */
+        .controls {
+            max-width: 1000px;
+            margin: 0 auto 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 250px;
+            padding: 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            color: #fff;
+        }
+
+        .filter-btn {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            color: #fff;
+            border-radius: 4px;
+        }
+
+        .filter-btn.active {
+            background: var(--accent);
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* アイテムリスト */
+        .item-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 15px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .item-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            position: relative;
+            transition: transform 0.1s;
+        }
+
+        .item-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .fav-star {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+            font-size: 1.2em;
+            color: #555;
+            user-select: none;
+        }
+
+        .fav-star.active { color: var(--accent); }
+
+        .item-icon {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto 10px;
+        }
+
+        .item-name {
+            font-size: 0.85em;
+            font-weight: bold;
+            text-align: center;
+            height: 2.5em;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            margin-bottom: 10px;
+        }
+
+        .item-price {
+            text-align: center;
+            font-size: 1.1em;
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        .price-unit { font-size: 0.7em; margin-left: 2px; }
     </style>
 </head>
 <body>
 
-    <h2>Tarkov Price Tracker</h2>
+    <h1>EFT Market Tracker</h1>
 
     <div class="controls">
-        <select id="modeSelect" onchange="changeMode(this.value)">
-            <option value="pvp">PvP Mode</option>
-            <option value="pve">PvE Mode</option>
-        </select>
-        <input type="text" id="search" placeholder="アイテム名で検索..." oninput="render()">
-        <select id="categorySelect" onchange="render()"></select>
-        <div id="updateTime" style="font-size: 0.8em; color: #888;"></div>
+        <input type="text" id="searchInput" class="search-input" placeholder="アイテム名で検索...">
+        <button id="showFavBtn" class="filter-btn">お気に入りのみ</button>
+        <button id="modeBtn" class="filter-btn">PVP</button>
     </div>
 
-    <div id="itemList" class="item-list"></div>
-
-    <div id="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h3 id="modalTitle"></h3>
-            <div id="modalInfo" style="margin-bottom: 15px; font-size: 0.9em; color: #ccc;"></div>
-            <canvas id="priceChart"></canvas>
+    <div id="itemGrid" class="item-grid">
         </div>
-    </div>
-    
+
     <script>
-        let items = [];         
-        let historyStore = {};  
-        let currentMode = 'pvp';
-        let chart = null;
+        let allItems = [];
+        let favorites = JSON.parse(localStorage.getItem('eft_favs') || '[]');
+        let currentMode = 'pvp'; // pvp or pve
+        let showOnlyFav = false;
 
         async function init() {
-            await changeMode('pvp');
-        }
-
-        async function changeMode(mode) {
-            currentMode = mode;
-            // モード切替時に履歴キャッシュをリセット
-            historyStore = {}; 
-            
             try {
-                const res = await fetch(`list-${mode}.json`);
-                const data = await res.json();
-                items = data.items; //
-                document.getElementById('updateTime').innerText = `最終更新: ${new Date(data.time).toLocaleString()}`;
+                // data-pvp.json から現在の価格も含めて取得
+                const response = await fetch(`data-${currentMode}.json`);
+                const dataJson = await response.json();
+                
+                // 表示用に整形
+                allItems = Object.entries(dataJson.data).map(([id, info]) => ({
+                    id: id,
+                    name: info.n,
+                    price: info.cp,
+                    img: `https://assets.tarkov.dev/${id}-512.webp` // IDから画像URLを生成
+                }));
 
-                // カテゴリ生成
-                const cats = [...new Set(items.map(i => i.category))].sort();
-                const catSelect = document.getElementById('categorySelect');
-                catSelect.innerHTML = '<option value="">すべてのカテゴリ</option>' + 
-                    cats.map(c => `<option value="${c}">${c}</option>`).join('');
-
-                // 最初に一度データファイルを読み込んで価格を表示させる
-                await loadPriceData();
                 render();
             } catch (e) {
-                console.error("データロード失敗", e);
+                console.error("データの読み込みに失敗しました", e);
             }
         }
 
-        async function loadPriceData() {
-            const res = await fetch(`data-${currentMode}.json`);
-            const json = await res.json();
-            historyStore = json.data; //
-        }
-
         function render() {
-            const query = document.getElementById('search').value.toLowerCase();
-            const cat = document.getElementById('categorySelect').value;
-            const listEl = document.getElementById('itemList');
-
-            const filtered = items.filter(i => {
-                const matchName = i.name.toLowerCase().includes(query) || i.shortName?.toLowerCase().includes(query);
-                const matchCat = !cat || i.category === cat;
-                return matchName && matchCat;
-            });
-
-            // フリマ最低価格(cp)に基づいた「1マス単価」で降順ソート
-            filtered.sort((a, b) => {
-                const priceA = historyStore[a.id]?.cp || 0;
-                const priceB = historyStore[b.id]?.cp || 0;
-                const perSlotA = priceA / (a.slots || 1);
-                const perSlotB = priceB / (b.slots || 1);
-                return perSlotB - perSlotA;
-            });
-
-            listEl.innerHTML = filtered.map(i => {
-                const price = historyStore[i.id]?.cp || 0;
-                const perSlot = Math.floor(price / (i.slots || 1));
-                
-                return `
-                <div class="item-card" onclick="showDetail('${i.id}')">
-                    <img src="${i.img}" alt="">
-                    <div class="item-name">${i.name}</div>
-                    <div class="item-price" style="color: #ffca28;">最低: ${price.toLocaleString()} ₽</div>
-                    <div class="per-slot">1マス: ${perSlot.toLocaleString()} ₽</div>
-                </div>`;
-            }).join('');
-        }
-
-        async function showDetail(id) {
-            const item = items.find(i => i.id === id);
-            const modal = document.getElementById('modal');
-            modal.style.display = 'block';
-            document.getElementById('modalTitle').innerText = item.name;
-
-            // 履歴(h)からグラフを作成
-            const history = historyStore[id]?.h || [];
+            const grid = document.getElementById('itemGrid');
+            const searchTag = document.getElementById('searchInput').value.toLowerCase();
             
-            let infoText = `サイズ: ${item.slots}マス | 店売り最高: ${item.bestTraderPrice.toLocaleString()} ₽ (${item.bestTraderName})`;
-            if (item.props.damage) infoText += `<br>弾薬性能: ダメージ ${item.props.damage} / 貫通 ${item.props.penetrationPower}`;
-            document.getElementById('modalInfo').innerHTML = infoText;
+            grid.innerHTML = '';
 
-            const ctx = document.getElementById('priceChart').getContext('2d');
-            if (chart) chart.destroy();
+            const filtered = allItems.filter(item => {
+                const matchSearch = item.name.toLowerCase().includes(searchTag);
+                const isFav = favorites.includes(item.id);
+                if (showOnlyFav && !isFav) return false;
+                return matchSearch;
+            });
 
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: history.map(h => new Date(h.t).toLocaleTimeString()),
-                    datasets: [{
-                        label: 'フリマ最低価格推移',
-                        data: history.map(h => h.p),
-                        borderColor: '#ffca28',
-                        backgroundColor: 'rgba(255, 202, 40, 0.1)',
-                        fill: true,
-                        tension: 0.3
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { labels: { color: '#fff' } } },
-                    scales: {
-                        y: { grid: { color: '#333' }, ticks: { color: '#aaa' } },
-                        x: { grid: { display: false }, ticks: { color: '#aaa' } }
-                    }
-                }
+            // お気に入りを上に持ってくる
+            filtered.sort((a, b) => {
+                const aFav = favorites.includes(a.id) ? 1 : 0;
+                const bFav = favorites.includes(b.id) ? 1 : 0;
+                return bFav - aFav;
+            });
+
+            filtered.forEach(item => {
+                const isFav = favorites.includes(item.id);
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.innerHTML = `
+                    <span class="fav-star ${isFav ? 'active' : ''}" onclick="toggleFav('${item.id}')">★</span>
+                    <img class="item-icon" src="${item.img}" loading="lazy">
+                    <div class="item-name">${item.name}</div>
+                    <div class="item-price">${item.price.toLocaleString()}<span class="price-unit">₽</span></div>
+                `;
+                grid.appendChild(card);
             });
         }
 
-        function closeModal() { document.getElementById('modal').style.display = 'none'; }
+        // お気に入りの切り替え
+        window.toggleFav = function(id) {
+            if (favorites.includes(id)) {
+                favorites = favorites.filter(favId => favId !== id);
+            } else {
+                favorites.push(id);
+            }
+            localStorage.setItem('eft_favs', JSON.stringify(favorites));
+            render();
+        };
+
+        // イベント設定
+        document.getElementById('searchInput').addEventListener('input', render);
+        
+        document.getElementById('showOnlyFav').addEventListener('click', (e) => {
+            showOnlyFav = !showOnlyFav;
+            e.target.classList.toggle('active');
+            render();
+        });
+
+        // モード切り替え（PVP/PVE）
+        document.getElementById('modeBtn').addEventListener('click', (e) => {
+            currentMode = currentMode === 'pvp' ? 'pve' : 'pvp';
+            e.target.innerText = currentMode.toUpperCase();
+            init();
+        });
+
         init();
     </script>
 </body>
