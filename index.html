@@ -95,12 +95,18 @@
 
         function setMode(mode) {
             currentMode = mode;
+            // ボタンの見た目を切り替え
             document.getElementById('pvpBtn').classList.toggle('active', mode === 'regular');
             document.getElementById('pveBtn').classList.toggle('active', mode === 'pve');
-            // データ収集側がPvEに対応したらここを反映（現在はPvPのみ収集）
-            alert("※現在データ収集側がPvPのみのため、表示は切り替わりません。収集側の修正が必要です。");
+            
+            // 選択リストとグラフをリセットして更新
+            filterItems();
+            if (myChart) {
+                updateChart(); 
+            }
         }
 
+        // updateChart関数の中の「find」の部分も少し修正が必要です
         function updateChart() {
             const itemId = document.getElementById('itemSelect').value;
             if (!itemId) return;
@@ -109,7 +115,11 @@
             const prices = [];
 
             historyData.forEach(entry => {
-                const item = entry.items.find(i => i.id === itemId);
+                // currentMode (pvp か pve) に合わせてデータを探す
+                const dataList = (currentMode === 'pve') ? entry.pve : entry.pvp;
+                if (!dataList) return; // 古いデータ（PvPしかない時）の対策
+
+                const item = dataList.find(i => i.id === itemId);
                 if (item) {
                     const date = new Date(entry.time);
                     labels.push(date.toLocaleString('ja-JP', { month:'short', day:'2-digit', hour: '2-digit', minute: '2-digit' }));
