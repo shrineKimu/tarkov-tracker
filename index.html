@@ -6,142 +6,138 @@
     <title>EFT Price Tracker Pro</title>
     <style>
         :root {
-            --bg-color: #0f0f0f;
-            --card-bg: #1a1a1a;
+            --bg-color: #0c0c0c;
+            --card-bg: #161616;
             --accent: #e59322;
-            --text: #e0e0e0;
-            --border: #333;
+            --text: #d0d0d0;
+            --border: #2a2a2a;
             --success: #00ff88;
         }
 
         body {
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
             background-color: var(--bg-color);
             color: var(--text);
             margin: 0;
-            padding: 20px;
+            padding: 10px;
         }
 
-        h1 { text-align: center; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
+        h1 { text-align: center; color: var(--accent); font-size: 1.5em; letter-spacing: 3px; }
 
+        /* コントロールパネル */
         .controls {
-            max-width: 1000px;
-            margin: 0 auto 30px;
+            max-width: 900px;
+            margin: 0 auto 20px;
             display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
+            flex-direction: column;
+            gap: 15px;
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
         }
+
+        .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
         .search-input {
-            flex: 1;
+            flex: 2;
             min-width: 200px;
-            padding: 12px 20px;
-            border-radius: 25px;
+            padding: 10px 15px;
+            border-radius: 6px;
             border: 1px solid var(--border);
-            background: var(--card-bg);
+            background: var(--bg-color);
             color: #fff;
             outline: none;
-            transition: 0.3s;
         }
-        .search-input:focus { border-color: var(--accent); box-shadow: 0 0 10px rgba(229, 147, 34, 0.2); }
 
-        .btn-group { display: flex; gap: 5px; background: var(--card-bg); padding: 5px; border-radius: 8px; border: 1px solid var(--border); }
-
-        .filter-btn {
-            padding: 8px 16px;
-            cursor: pointer;
-            background: transparent;
-            border: none;
-            color: #888;
+        select, .btn {
+            padding: 10px;
+            background: var(--bg-color);
+            color: #fff;
+            border: 1px solid var(--border);
             border-radius: 6px;
-            transition: 0.2s;
-            font-weight: bold;
-            font-size: 0.9em;
+            cursor: pointer;
         }
 
-        .filter-btn:hover { color: #fff; }
-        .filter-btn.active {
-            background: var(--accent);
-            color: #000;
-        }
+        .btn-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .mode-btn { border: none; padding: 10px 20px; background: #252525; color: #888; cursor: pointer; font-weight: bold; }
+        .mode-btn.active { background: var(--accent); color: #000; }
 
-        .item-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 15px;
-            max-width: 1200px;
+        .btn-fav.active { color: var(--accent); border-color: var(--accent); }
+
+        /* リストデザイン（横長バー） */
+        .item-list {
+            max-width: 900px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        .item-card {
+        .item-row {
+            display: grid;
+            grid-template-columns: 40px 60px 1fr 120px 100px;
+            align-items: center;
             background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 15px;
-            position: relative;
+            border-radius: 6px;
+            padding: 8px 12px;
             transition: 0.2s;
         }
-        .item-card:hover { border-color: var(--accent); transform: translateY(-3px); }
 
-        .fav-star {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            cursor: pointer;
-            font-size: 1.4em;
-            color: #333;
-            z-index: 10;
-        }
-        .fav-star.active { color: var(--accent); text-shadow: 0 0 5px rgba(229, 147, 34, 0.5); }
+        .item-row:hover { border-color: #555; background: #202020; }
 
-        .item-icon {
-            width: 100%;
-            height: 90px;
-            object-fit: contain;
-            display: block;
-            margin-bottom: 12px;
-        }
+        .fav-star { cursor: pointer; font-size: 1.2em; color: #333; text-align: center; }
+        .fav-star.active { color: var(--accent); }
 
-        .item-name {
-            font-size: 0.85em;
-            font-weight: bold;
-            text-align: center;
-            height: 2.8em;
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            margin-bottom: 10px;
-            color: #bbb;
-        }
+        .item-icon { width: 45px; height: 45px; object-fit: contain; }
+
+        .item-info { padding: 0 10px; overflow: hidden; }
+        .item-name { font-size: 0.9em; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .item-category { font-size: 0.7em; color: #666; margin-top: 2px; }
 
         .item-price {
-            text-align: center;
-            font-size: 1.2em;
-            color: var(--success);
+            text-align: right;
             font-weight: bold;
-            font-family: 'Courier New', monospace;
+            color: var(--success);
+            font-family: monospace;
+            font-size: 1.1em;
+        }
+
+        .label-mobile { display: none; }
+
+        @media (max-width: 600px) {
+            .item-row { grid-template-columns: 30px 50px 1fr 90px; }
+            .item-category { display: none; }
+            .item-price { font-size: 0.9em; }
         }
     </style>
 </head>
 <body>
 
-    <h1>EFT Market Tracker</h1>
+    <h1>EFT MARKET</h1>
 
     <div class="controls">
-        <input type="text" id="searchInput" class="search-input" placeholder="アイテム名で検索...">
-        
-        <div class="btn-group">
-            <button id="pvpBtn" class="filter-btn active">PVP</button>
-            <button id="pveBtn" class="filter-btn">PVE</button>
+        <div class="row">
+            <input type="text" id="searchInput" class="search-input" placeholder="アイテム名で検索...">
+            <div class="btn-group">
+                <button id="pvpBtn" class="mode-btn active">PVP</button>
+                <button id="pveBtn" class="mode-btn">PVE</button>
+            </div>
         </div>
-
-        <button id="favFilterBtn" class="filter-btn" style="border: 1px solid var(--border);">★ お気に入り</button>
+        
+        <div class="row">
+            <select id="sortSelect">
+                <option value="price_desc">値段が高い順</option>
+                <option value="price_asc">値段が安い順</option>
+                <option value="category">カテゴリー順</option>
+                <option value="name">名前順</option>
+            </select>
+            <button id="favFilterBtn" class="btn btn-fav">★ お気に入り</button>
+        </div>
     </div>
 
-    <div id="itemGrid" class="item-grid">
+    <div id="itemList" class="item-list">
         </div>
 
     <script>
@@ -150,121 +146,114 @@
         let currentMode = 'pvp';
         let showOnlyFav = false;
 
-        // データ読み込み関数
         async function loadData() {
-            const grid = document.getElementById('itemGrid');
-            grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center;">読み込み中...</div>';
+            const listDiv = document.getElementById('itemList');
+            listDiv.innerHTML = '<div style="text-align:center">Loading...</div>';
 
             try {
-                const response = await fetch(`data-${currentMode}.json`);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const json = await response.json();
+                // data-xxx.json と list-xxx.json を両方取得してカテゴリー情報を補完する
+                const [dataRes, listRes] = await Promise.all([
+                    fetch(`data-${currentMode}.json`),
+                    fetch(`list-${currentMode}.json`)
+                ]);
                 
-                // データ構造を配列に変換
-                allItems = Object.entries(json.data).map(([id, info]) => ({
+                const dataJson = await dataRes.json();
+                const listJson = await listRes.json();
+
+                // list側のカテゴリー情報をIDで引けるようにマップ化
+                const categoryMap = {};
+                listJson.items.forEach(i => categoryMap[i.id] = i.category);
+
+                allItems = Object.entries(dataJson.data).map(([id, info]) => ({
                     id: id,
                     name: info.n,
                     price: info.cp,
+                    category: categoryMap[id] || "その他",
                     img: `https://assets.tarkov.dev/${id}-512.webp`
                 }));
 
                 render();
             } catch (e) {
-                console.error("Load Error:", e);
-                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: red;">データの読み込みに失敗しました (data-${currentMode}.jsonが見つからないか空です)</div>`;
+                listDiv.innerHTML = "エラー: データの読み込みに失敗しました。";
             }
         }
 
-        // 描画関数
         function render() {
-            const grid = document.getElementById('itemGrid');
+            const listDiv = document.getElementById('itemList');
             const query = document.getElementById('searchInput').value.toLowerCase();
+            const sortVal = document.getElementById('sortSelect').value;
             
-            grid.innerHTML = '';
+            listDiv.innerHTML = '';
 
-            const filtered = allItems.filter(item => {
+            // フィルタ
+            let filtered = allItems.filter(item => {
                 const isFav = favorites.includes(item.id);
                 const matchSearch = item.name.toLowerCase().includes(query);
-                if (showOnlyFav && !isFav) return false;
-                return matchSearch;
+                return (showOnlyFav ? isFav : true) && matchSearch;
             });
 
-            // お気に入り優先ソート
+            // 並び替え
             filtered.sort((a, b) => {
+                // まずはお気に入り最優先
                 const aFav = favorites.includes(a.id) ? 1 : 0;
                 const bFav = favorites.includes(b.id) ? 1 : 0;
-                return bFav - aFav;
-            });
+                if (aFav !== bFav) return bFav - aFav;
 
-            if (filtered.length === 0) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center;">該当するアイテムがありません</div>';
-                return;
-            }
+                if (sortVal === 'price_desc') return b.price - a.price;
+                if (sortVal === 'price_asc') return a.price - b.price;
+                if (sortVal === 'category') return a.category.localeCompare(b.category);
+                if (sortVal === 'name') return a.name.localeCompare(b.name);
+                return 0;
+            });
 
             filtered.forEach(item => {
                 const isFav = favorites.includes(item.id);
-                const card = document.createElement('div');
-                card.className = 'item-card';
-                card.innerHTML = `
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.innerHTML = `
                     <div class="fav-star ${isFav ? 'active' : ''}">★</div>
-                    <img class="item-icon" src="${item.img}" loading="lazy" onerror="this.src='https://via.placeholder.com/80?text=No+Img'">
-                    <div class="item-name">${item.name}</div>
+                    <img class="item-icon" src="${item.img}" loading="lazy" onerror="this.src='https://via.placeholder.com/45?text=?'">
+                    <div class="item-info">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-category">${item.category}</div>
+                    </div>
                     <div class="item-price">${item.price.toLocaleString()} ₽</div>
                 `;
 
-                // 星クリック
-                card.querySelector('.fav-star').onclick = (e) => {
-                    e.stopPropagation();
-                    toggleFav(item.id);
-                };
-
-                grid.appendChild(card);
+                row.querySelector('.fav-star').onclick = () => toggleFav(item.id);
+                listDiv.appendChild(row);
             });
         }
 
         function toggleFav(id) {
-            const index = favorites.indexOf(id);
-            if (index > -1) {
-                favorites.splice(index, 1);
-            } else {
-                favorites.push(id);
-            }
+            const idx = favorites.indexOf(id);
+            if (idx > -1) favorites.splice(idx, 1);
+            else favorites.push(id);
             localStorage.setItem('eft_favs', JSON.stringify(favorites));
             render();
         }
 
-        // 初期化処理
-        window.onload = () => {
-            // 検索イベント
-            document.getElementById('searchInput').oninput = render;
+        // イベント設定
+        document.getElementById('searchInput').oninput = render;
+        document.getElementById('sortSelect').onchange = render;
+        
+        document.getElementById('favFilterBtn').onclick = (e) => {
+            showOnlyFav = !showOnlyFav;
+            e.target.classList.toggle('active');
+            render();
+        };
 
-            // お気に入りフィルタ
-            document.getElementById('favFilterBtn').onclick = (e) => {
-                showOnlyFav = !showOnlyFav;
-                e.target.classList.toggle('active');
-                render();
-            };
-
-            // PVPボタン
-            document.getElementById('pvpBtn').onclick = (e) => {
-                if (currentMode === 'pvp') return;
-                currentMode = 'pvp';
-                document.getElementById('pvpBtn').classList.add('active');
-                document.getElementById('pveBtn').classList.remove('active');
-                loadData();
-            };
-
-            // PVEボタン
-            document.getElementById('pveBtn').onclick = (e) => {
-                if (currentMode === 'pve') return;
-                currentMode = 'pve';
-                document.getElementById('pveBtn').classList.add('active');
-                document.getElementById('pvpBtn').classList.remove('active');
-                loadData();
-            };
-
+        const setMode = (mode) => {
+            currentMode = mode;
+            document.getElementById('pvpBtn').classList.toggle('active', mode === 'pvp');
+            document.getElementById('pveBtn').classList.toggle('active', mode === 'pve');
             loadData();
         };
+
+        document.getElementById('pvpBtn').onclick = () => setMode('pvp');
+        document.getElementById('pveBtn').onclick = () => setMode('pve');
+
+        window.onload = loadData;
     </script>
 </body>
 </html>
