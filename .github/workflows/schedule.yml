@@ -1,9 +1,39 @@
-- name: Commit and Push
-  run: |
-    git config user.name "Auto-Logger"
-    git config user.email "actions@github.com"
-    git add data-pvp.json data-pve.json list-pvp.json list-pve.json
-    if ! git diff --cached --quiet; then
-      git commit -m "Update list and data [skip ci]"
-      git push
-    fi
+name: Tarkov Price Logger
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+# ここが重要：書き込み権限を明示的に与える
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run collector
+        run: node collect.js
+
+      - name: Commit and Push
+        run: |
+          git config user.name "Auto-Logger"
+          git config user.email "actions@github.com"
+          git add data-pvp.json data-pve.json list-pvp.json list-pve.json
+          
+          # 変更がある場合のみコミット
+          if ! git diff --cached --quiet; then
+            git commit -m "Update list and data [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
