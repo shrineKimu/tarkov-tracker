@@ -1,4 +1,30 @@
 const fs = require('fs');
+const path = require('path');
+
+// 画像保存用フォルダの作成
+const imgDir = path.join(__dirname, 'images');
+if (!fs.existsSync(imgDir)) {
+    fs.mkdirSync(imgDir);
+}
+
+// 画像をダウンロードする関数
+async function downloadImage(id, url) {
+    const filePath = path.join(imgDir, `${id}.png`);
+    
+    // すでに画像が存在する場合はスキップ（効率化）
+    if (fs.existsSync(filePath)) return;
+
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        fs.writeFileSync(filePath, buffer);
+        console.log(`Downloaded: ${id}.png`);
+    } catch (e) {
+        console.error(`Failed to download ${id}:`, e.message);
+    }
+}
 
 async function collect() {
     const query = JSON.stringify({
@@ -33,22 +59,34 @@ async function collect() {
         const result = await response.json();
         const timestamp = new Date().toISOString();
 
-        const updateStorage = (mode, items) => {
-            const listFile = `list-${mode}.json`;    // アイテム図鑑（詳細スペック）
-            const dataFile = `data-${mode}.json`;    // 価格履歴（7日分）
+        const updateStorage = async (mode, items) => {
+            const listFile = `list-${mode}.json`;
+            const dataFile = `data-${mode}.json`;
 
-            // --- 1. list-xxx.json の作成 (アイテムスペック) ---
-            const specList = items.map(i => {
+            const specList = [];
+            let historyData = {};
+
+            if (fs.existsSync(dataFile)) {
+                try {
+                    historyData = JSON.parse(fs.readFileSync(dataFile, 'utf8')).data || {};
+                } catch (e) { historyData = {}; }
+            }
+
+            for (const i of items) {
                 const slots = (i.width || 1) * (i.height || 1);
                 
-                // 店売り最高値を計算
+                // --- 画像のダウンロード処理 ---
+                if (i.image512pxLink) {
+                    await downloadImage(i.id, i.image512pxLink);
+                }
+
                 let bestTrader = { price: 0, name: "" };
                 if (i.sellFor && i.sellFor.length > 0) {
                     const best = i.sellFor.reduce((max, curr) => max.price > curr.price ? max : curr);
                     bestTrader = { price: best.price, name: best.vendor.name };
                 }
 
-                return {
+                specList.push({
                     id: i.id,
                     name: i.name,
                     shortName: i.shortName,
@@ -57,53 +95,28 @@ async function collect() {
                     category: i.category?.name || "その他",
                     bestTraderPrice: bestTrader.price,
                     bestTraderName: bestTrader.name,
-                    img: i.image512pxLink,
+                    img: `images/${i.id}.png`, // 自前のパスに変更
                     props: i.properties || {}
-                };
-            });
+                });
 
-            // --- 2. data-xxx.json の作成 (価格推移) ---
-            let historyData = {};
-            // 既存の履歴があれば読み込む
-            if (fs.existsSync(dataFile)) {
-                try {
-                    const raw = fs.readFileSync(dataFile, 'utf8');
-                    historyData = JSON.parse(raw).data || {};
-                } catch (e) {
-                    historyData = {};
+                if (i.lastLowPrice > 0) {
+                    if (!historyData[i.id]) historyData[i.id] = { n: i.name, h: [] };
+                    historyData[i.id].cp = i.lastLowPrice;
+                    historyData[i.id].h.push({ t: timestamp, p: i.lastLowPrice });
+                    if (historyData[i.id].h.length > 672) historyData[i.id].h = historyData[i.id].h.slice(-672);
                 }
             }
 
-            items.filter(i => i.lastLowPrice > 0).forEach(i => {
-                // 初めてのアイテムなら枠を作る
-                if (!historyData[i.id]) {
-                    historyData[i.id] = { n: i.name, h: [] };
-                }
-                
-                // 現在の価格を追加 (t:時刻, p:価格)
-                historyData[i.id].cp = i.lastLowPrice; // Current Price
-                historyData[i.id].h.push({ t: timestamp, p: i.lastLowPrice });
-
-                // 7日分（15分に1回なら最大672件）を保持
-                if (historyData[i.id].h.length > 672) {
-                    historyData[i.id].h = historyData[i.id].h.slice(-672);
-                }
-            });
-
-            // ファイル書き出し
             fs.writeFileSync(listFile, JSON.stringify({ time: timestamp, items: specList }));
             fs.writeFileSync(dataFile, JSON.stringify({ time: timestamp, data: historyData }));
         };
 
-        // PvPとPvEをそれぞれのファイルへ保存
-        updateStorage('pvp', result.data.pvp);
-        updateStorage('pve', result.data.pve);
+        await updateStorage('pvp', result.data.pvp);
+        await updateStorage('pve', result.data.pve);
 
-        console.log(`[${new Date().toLocaleTimeString()}] 保存完了:`);
-        console.log(` - list-pvp.json / data-pvp.json`);
-        console.log(` - list-pve.json / data-pve.json`);
+        console.log(`[${new Date().toLocaleTimeString()}] 収集・画像保存完了`);
     } catch (e) {
-        console.error("収集・保存エラー:", e);
+        console.error("エラー:", e);
         process.exit(1);
     }
 }
