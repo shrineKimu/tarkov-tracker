@@ -13,6 +13,7 @@
             --border: #2a2a2a;
             --success: #00ff88;
             --warning: #ffca28;
+            --modal-bg: rgba(0, 0, 0, 0.85);
         }
 
         body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text); margin: 0; padding: 10px; }
@@ -27,38 +28,41 @@
         .search-input { flex: 2; min-width: 200px; padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-color); color: #fff; }
         select, .btn { padding: 10px; background: var(--bg-color); color: #fff; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
 
-        .btn-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-        .mode-btn { border: none; padding: 10px 20px; background: #252525; color: #888; cursor: pointer; }
-        .mode-btn.active { background: var(--accent); color: #000; font-weight: bold; }
-
         .item-list { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
         
         .item-row {
             display: grid;
             grid-template-columns: 40px 60px 1fr 80px 140px 140px;
             align-items: center; background: var(--card-bg); border: 1px solid var(--border);
-            border-radius: 6px; padding: 8px 15px; gap: 15px;
+            border-radius: 6px; padding: 8px 15px; gap: 15px; cursor: pointer; transition: 0.2s;
         }
+        .item-row:hover { border-color: var(--accent); background: #222; }
 
         .item-icon { width: 45px; height: 45px; object-fit: contain; }
-        .item-name { font-size: 0.9em; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .item-category { font-size: 0.7em; color: #666; }
+        .item-name { font-size: 0.9em; font-weight: bold; }
 
         .price-group { display: flex; flex-direction: column; align-items: flex-end; }
-        .price-label { font-size: 0.6em; color: #666; margin-bottom: 2px; }
+        .price-label { font-size: 0.6em; color: #666; }
         .price-val { font-family: monospace; font-weight: bold; font-size: 1.05em; }
-        .per-slot { font-size: 0.75em; color: #888; margin-top: 2px; }
+        .per-slot { font-size: 0.75em; color: #888; }
         
         .flea-color { color: var(--success); }
-        .trader-color { color: #aaa; }
         .trader-high { color: var(--warning); }
 
-        .slot-badge { background: #333; color: #ccc; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; text-align: center; }
-
-        @media (max-width: 850px) {
-            .item-row { grid-template-columns: 35px 50px 1fr 60px 100px; }
-            .trader-col { display: none; }
+        /* モーダル設定 */
+        #modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--modal-bg); z-index: 100; justify-content: center; align-items: center;
         }
+        .modal-content {
+            background: #1e1e1e; padding: 25px; border-radius: 15px; border: 1px solid var(--accent);
+            width: 90%; max-width: 500px; position: relative;
+        }
+        .close-btn { position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; color: #666; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .stat-box { background: #111; padding: 10px; border-radius: 8px; border: 1px solid #333; }
+        .stat-label { font-size: 0.7em; color: #888; display: block; }
+        .stat-value { font-size: 1.2em; font-weight: bold; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -75,10 +79,8 @@
         </div>
         <div class="row">
             <select id="sortSelect">
-                <option value="flea_per_slot">フリマ効率 (1マス単価) 順</option>
-                <option value="trader_per_slot">店売り効率 (1マス単価) 順</option>
-                <option value="flea_price">フリマ総額順</option>
-                <option value="trader_price">店売り総額順</option>
+                <option value="flea_per_slot">フリマ効率順</option>
+                <option value="trader_per_slot">店売り効率順</option>
             </select>
             <button id="favFilterBtn" class="btn">★ お気に入り</button>
         </div>
@@ -86,16 +88,21 @@
 
     <div id="itemList" class="item-list"></div>
 
+    <div id="modal" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
     <script>
         let allItems = [];
+        let rawHistoryData = {};
         let favorites = JSON.parse(localStorage.getItem('eft_favs') || '[]');
         let currentMode = 'pvp';
         let showOnlyFav = false;
 
         async function loadData() {
-            const listDiv = document.getElementById('itemList');
-            listDiv.innerHTML = '<div style="text-align:center">Loading...</div>';
-
             try {
                 const [dataRes, listRes] = await Promise.all([
                     fetch(`data-${currentMode}.json`),
@@ -103,107 +110,108 @@
                 ]);
                 const dataJson = await dataRes.json();
                 const listJson = await listRes.json();
+                rawHistoryData = dataJson.data;
+
                 const infoMap = {};
                 listJson.items.forEach(i => infoMap[i.id] = i);
 
-                allItems = Object.entries(dataJson.data).map(([id, info]) => {
+                allItems = Object.entries(rawHistoryData).map(([id, info]) => {
                     const detail = infoMap[id] || {};
                     const slots = detail.slots || 1;
-                    const fleaPrice = info.cp || 0;
-                    const traderPrice = detail.bestTraderPrice || 0;
                     return {
-                        id: id,
+                        id,
                         name: info.n,
-                        fleaPrice: fleaPrice,
-                        traderPrice: traderPrice,
+                        fleaPrice: info.cp || 0,
+                        traderPrice: detail.bestTraderPrice || 0,
                         traderName: detail.bestTraderName || "---",
-                        category: detail.category || "その他",
-                        slots: slots,
-                        fleaPerSlot: Math.floor(fleaPrice / slots),
-                        traderPerSlot: Math.floor(traderPrice / slots),
-                        img: `https://assets.tarkov.dev/${id}-512.webp`
+                        slots,
+                        fleaPerSlot: Math.floor((info.cp || 0) / slots),
+                        traderPerSlot: Math.floor((detail.bestTraderPrice || 0) / slots),
+                        img: detail.img || `https://assets.tarkov.dev/${id}-512.webp`,
+                        history: info.h || []
                     };
                 });
                 render();
-            } catch (e) { listDiv.innerHTML = "Error loading data."; }
+            } catch (e) { console.error(e); }
         }
+
+        function showDetail(id) {
+            const item = allItems.find(i => i.id === id);
+            const prices = item.history.map(h => h.p);
+            
+            const max = Math.max(...prices);
+            const min = Math.min(...prices);
+            const avg = Math.floor(prices.reduce((a, b) => a + b, 0) / prices.length);
+            
+            // 変動率 (標準偏差的な簡易計算)
+            const diff = max - min;
+            const volatility = avg > 0 ? ((diff / avg) * 100).toFixed(1) : 0;
+
+            document.getElementById('modalBody').innerHTML = `
+                <div style="display:flex; align-items:center; gap:20px;">
+                    <img src="${item.img}" style="width:80px; height:80px; object-fit:contain;">
+                    <div>
+                        <h2 style="margin:0; color:var(--accent);">${item.name}</h2>
+                        <span style="color:#666; font-size:0.8em;">ID: ${item.id}</span>
+                    </div>
+                </div>
+
+                <div class="stat-grid">
+                    <div class="stat-box"><span class="stat-label">7日間 最高</span><span class="stat-value flea-color">${max.toLocaleString()} ₽</span></div>
+                    <div class="stat-box"><span class="stat-label">7日間 最低</span><span class="stat-value trader-high">${min.toLocaleString()} ₽</span></div>
+                    <div class="stat-box"><span class="stat-label">7日間 平均</span><span class="stat-value">${avg.toLocaleString()} ₽</span></div>
+                    <div class="stat-box"><span class="stat-label">変動率</span><span class="stat-value" style="color:${volatility > 20 ? 'var(--warning)' : 'var(--success)'}">${volatility}%</span></div>
+                </div>
+
+                <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <span>現在のフリマ総額:</span>
+                        <span class="flea-color font-bold">${item.fleaPrice.toLocaleString()} ₽</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span>${item.traderName} 買取額:</span>
+                        <span class="trader-high font-bold">${item.traderPrice.toLocaleString()} ₽</span>
+                    </div>
+                    <div style="font-size:0.8em; color:#888; margin-top:10px; text-align:right;">
+                        ※1枠あたり効率: ${item.fleaPerSlot.toLocaleString()} ₽
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
         function render() {
             const listDiv = document.getElementById('itemList');
             const query = document.getElementById('searchInput').value.toLowerCase();
-            const sortVal = document.getElementById('sortSelect').value;
             listDiv.innerHTML = '';
 
-            let filtered = allItems.filter(item => {
-                const isFav = favorites.includes(item.id);
-                return (showOnlyFav ? isFav : true) && item.name.toLowerCase().includes(query);
-            });
-
-            filtered.sort((a, b) => {
-                const aFav = favorites.includes(a.id) ? 1 : 0;
-                const bFav = favorites.includes(b.id) ? 1 : 0;
-                if (aFav !== bFav) return bFav - aFav;
-
-                if (sortVal === 'flea_per_slot') return b.fleaPerSlot - a.fleaPerSlot;
-                if (sortVal === 'trader_per_slot') return b.traderPerSlot - a.traderPerSlot;
-                if (sortVal === 'flea_price') return b.fleaPrice - a.fleaPrice;
-                if (sortVal === 'trader_price') return b.traderPrice - a.traderPrice;
-                return 0;
-            });
+            let filtered = allItems.filter(item => item.name.toLowerCase().includes(query));
 
             filtered.forEach(item => {
-                const isFav = favorites.includes(item.id);
-                const isTraderBetter = item.traderPerSlot >= item.fleaPerSlot;
-                
                 const row = document.createElement('div');
                 row.className = 'item-row';
+                row.onclick = () => showDetail(item.id);
                 row.innerHTML = `
-                    <div style="cursor:pointer; color:${isFav?'var(--accent)':'#333'}" onclick="toggleFav('${item.id}')">★</div>
+                    <div style="color:#333">★</div>
                     <img class="item-icon" src="${item.img}" loading="lazy">
-                    <div style="overflow:hidden">
-                        <div class="item-name">${item.name}</div>
-                        <div class="item-category">${item.category}</div>
-                    </div>
+                    <div class="item-name">${item.name}</div>
                     <div class="slot-badge">${item.slots} 枠</div>
                     <div class="price-group">
-                        <span class="price-label">FLEA MARKET</span>
-                        <span class="price-val flea-color">${item.fleaPrice.toLocaleString()} ₽</span>
-                        <span class="per-slot">効率: ${item.fleaPerSlot.toLocaleString()} /枠</span>
+                        <span class="price-label">FLEA</span>
+                        <span class="price-val flea-color">${item.fleaPrice.toLocaleString()}</span>
                     </div>
-                    <div class="price-group trader-col">
+                    <div class="price-group">
                         <span class="price-label">${item.traderName}</span>
-                        <span class="price-val trader-color ${isTraderBetter?'trader-high':''}">${item.traderPrice.toLocaleString()} ₽</span>
-                        <span class="per-slot ${isTraderBetter?'trader-high':''}">効率: ${item.traderPerSlot.toLocaleString()} /枠</span>
+                        <span class="price-val trader-high">${item.traderPrice.toLocaleString()}</span>
                     </div>
                 `;
                 listDiv.appendChild(row);
             });
         }
 
-        function toggleFav(id) {
-            const idx = favorites.indexOf(id);
-            if (idx > -1) favorites.splice(idx, 1); else favorites.push(id);
-            localStorage.setItem('eft_favs', JSON.stringify(favorites));
-            render();
-        }
-
         document.getElementById('searchInput').oninput = render;
-        document.getElementById('sortSelect').onchange = render;
-        document.getElementById('favFilterBtn').onclick = (e) => {
-            showOnlyFav = !showOnlyFav;
-            e.target.style.backgroundColor = showOnlyFav ? 'var(--accent)' : '';
-            e.target.style.color = showOnlyFav ? '#000' : '';
-            render();
-        };
-        const updateMode = (mode) => {
-            currentMode = mode;
-            document.getElementById('pvpBtn').classList.toggle('active', mode==='pvp');
-            document.getElementById('pveBtn').classList.toggle('active', mode==='pve');
-            loadData();
-        };
-        document.getElementById('pvpBtn').onclick = () => updateMode('pvp');
-        document.getElementById('pveBtn').onclick = () => updateMode('pve');
-
         loadData();
     </script>
 </body>
