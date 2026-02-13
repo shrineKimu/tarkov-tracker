@@ -2,310 +2,174 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EFT Dashboard Pro (Light)</title>
+    <title>Tarkov Price Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --bg: #0b0b0b; --card: #161616; --accent: #ffae00; --text: #f0f0f0; --border: #333; }
+        body { font-family: sans-serif; background: #1a1a1a; color: #eee; margin: 20px; }
+        .controls { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+        input, select, button { padding: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff; }
         
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: var(--bg); 
-            color: var(--text); 
-            margin: 0; 
-            display: flex; 
-            flex-direction: column; 
-            height: 100vh; 
-            overflow: hidden; 
-        }
-        
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #000; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-        * { scrollbar-width: thin; scrollbar-color: #333 #000; }
+        .item-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .item-card { background: #2a2a2a; padding: 10px; border-radius: 8px; cursor: pointer; transition: 0.2s; border: 1px solid #333; }
+        .item-card:hover { border-color: #007bff; background: #333; }
+        .item-card img { width: 64px; height: 64px; object-fit: contain; display: block; margin: 0 auto 10px; }
+        .item-name { font-size: 0.9em; font-weight: bold; height: 2.8em; overflow: hidden; }
+        .item-price { color: #ffca28; font-size: 1.1em; margin-top: 5px; }
+        .per-slot { font-size: 0.8em; color: #aaa; }
 
-        .status-bar { 
-            height: 50px;
-            background: #000; 
-            padding: 0 20px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            border-bottom: 1px solid var(--border); 
-            flex-shrink: 0;
-            z-index: 100;
-        }
-
-        .mode-switch { display: flex; background: var(--card); padding: 4px; border-radius: 8px; }
-        .mode-btn { padding: 6px 15px; border: none; border-radius: 4px; cursor: pointer; color: #666; background: transparent; transition: 0.2s; }
-        .mode-btn.active { background: var(--accent); color: #000; font-weight: bold; }
-
-        .main-content { 
-            display: grid; 
-            grid-template-columns: 320px 1fr; 
-            flex: 1; 
-            overflow: hidden; 
-        }
-
-        .sidebar { 
-            border-right: 1px solid var(--border); 
-            display: flex; 
-            flex-direction: column; 
-            background: #0f0f0f; 
-            height: 100%;
-            overflow: hidden;
-        }
-
-        .filter-section { padding: 15px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-        input, select { width: 100%; background: var(--card); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 10px; box-sizing: border-box; outline: none; }
-        input:focus, select:focus { border-color: var(--accent); }
-        
-        .fav-filter-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: #888;
-            cursor: pointer;
-            margin-top: 5px;
-            user-select: none;
-        }
-        .fav-filter-label input { width: auto !important; margin: 0 !important; cursor: pointer; }
-
-        .item-list { 
-            overflow-y: auto; 
-            flex: 1; 
-            min-height: 0;
-        }
-
-        .item-row { 
-            padding: 12px 15px; 
-            border-bottom: 1px solid #1a1a1a; 
-            cursor: pointer; 
-            display: flex; 
-            align-items: center; 
-            gap: 12px; 
-            transition: 0.1s;
-        }
-        .item-row:hover { background: #1a1a1a; }
-        .item-row img { width: 36px; height: 36px; background: #222; border-radius: 4px; flex-shrink: 0; object-fit: contain; }
-        .item-row span { font-size: 13px; flex: 1; line-height: 1.4; }
-        .fav-star { color: #333; margin-left: auto; font-size: 18px; transition: 0.2s; }
-        .fav-star:hover { transform: scale(1.2); }
-        .fav-star.active { color: var(--accent); }
-
-        .detail-view { padding: 30px; overflow-y: auto; position: relative; height: 100%; box-sizing: border-box; background: var(--bg); }
-        .loading-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display:none; justify-content: center; align-items: center; z-index: 50; flex-direction: column; gap: 10px; }
-        
-        .detail-header { display: grid; grid-template-columns: 160px 1fr; gap: 30px; margin-bottom: 30px; align-items: start; }
-        .big-icon { width: 160px; height: 160px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; object-fit: contain; box-sizing: border-box; }
-        
-        .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-        .stat-card { background: var(--card); padding: 15px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
-        .stat-label { font-size: 12px; color: #888; margin-bottom: 5px; }
-        .stat-val { font-size: 20px; font-weight: bold; color: var(--accent); }
-        
-        .chart-box { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 20px; height: 450px; margin-top: 20px; }
-
-        @media (max-width: 900px) { 
-            .main-content { grid-template-columns: 1fr; }
-            .sidebar { display: none; }
-        }
+        /* モーダル */
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
+        .modal-content { background: #2a2a2a; margin: 5% auto; padding: 20px; width: 90%; max-width: 800px; border-radius: 10px; position: relative; }
+        .close-btn { position: absolute; top: 10px; right: 20px; font-size: 24px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div class="status-bar">
-    <div class="mode-switch">
-        <button id="pvpBtn" class="mode-btn active" onclick="setMode('pvp')">PvP</button>
-        <button id="pveBtn" class="mode-btn" onclick="setMode('pve')">PvE</button>
-    </div>
-    <div style="font-size: 12px; color: #666;">最終更新: <span id="lastUpdate" style="color:#aaa">-</span></div>
-</div>
+    <h2>Tarkov Price Tracker</h2>
 
-<div class="main-content">
-    <div class="sidebar">
-        <div class="filter-section">
-            <input type="text" id="searchInput" placeholder="アイテム名を検索..." oninput="renderList()">
-            <select id="catSelect" onchange="renderList()">
-                <option value="">すべてのカテゴリ</option>
-            </select>
-            <label class="fav-filter-label">
-                <span>お気に入りのみ</span>
-                <input type="checkbox" id="favOnly" onchange="renderList()">
-            </label>
-        </div>
-        <div id="itemList" class="item-list"></div>
+    <div class="controls">
+        <select id="modeSelect" onchange="changeMode(this.value)">
+            <option value="pvp">PvP Mode</option>
+            <option value="pve">PvE Mode</option>
+        </select>
+        <input type="text" id="search" placeholder="アイテム名で検索..." oninput="render()">
+        <select id="categorySelect" onchange="render()"></select>
+        <div id="updateTime" style="font-size: 0.8em; color: #888;"></div>
     </div>
 
-    <div class="detail-view" id="detailView" style="display:none;">
-        <div id="loading" class="loading-overlay">
-            <div style="font-size: 24px;">📊</div>
-            <div>履歴データを取得中...</div>
+    <div id="itemList" class="item-list"></div>
+
+    <div id="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h3 id="modalTitle"></h3>
+            <div id="modalInfo" style="margin-bottom: 15px; font-size: 0.9em; color: #ccc;"></div>
+            <canvas id="priceChart"></canvas>
         </div>
-        <div class="detail-header">
-            <img id="mainIcon" src="" class="big-icon">
-            <div>
-                <h2 id="mainName" style="margin:0 0 15px 0; font-size: 24px;">アイテム名</h2>
-                <div class="stat-grid">
-                    <div class="stat-card">
-                        <div class="stat-label">現在値</div>
-                        <div id="curPrice" class="stat-val">-</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">期間内最高</div>
-                        <div id="maxPrice" class="stat-val">-</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">期間内最低</div>
-                        <div id="minPrice" class="stat-val">-</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="chart-box"><canvas id="mainChart"></canvas></div>
     </div>
-</div>
 
-<script>
-    let currentItems = []; 
-    let fullHistory = [];  
-    let currentMode = 'pvp';
-    let chart = null;
-    let favorites = JSON.parse(localStorage.getItem('eft_favs') || '[]');
-    let selectedItemId = null;
+    <script>
+        let items = [];         // list-xxx.json の中身
+        let historyStore = {};  // data-xxx.json の中身 (一度読み込んだら保持)
+        let currentMode = 'pvp';
+        let chart = null;
 
-    // --- 【設定1】カテゴリ名を翻訳・統合するリスト ---
-    const trans = { 
-        "Mechanical Key": "鍵",
-    };
-
-    // --- 【設定2】特定のアイテム名だけカテゴリを強制上書きするリスト ---
-    const itemOverride = {
-        "TerraGroup Labs access keycard": "キーカード",
-    };
-
-    async function init() {
-        const res = await fetch(`list-${currentMode}.json`);
-        const data = await res.json();
-        currentItems = data.items;
-        document.getElementById('lastUpdate').innerText = new Date(data.time).toLocaleString();
-        
-        const cats = new Set();
-        
-        currentItems.forEach(i => {
-            // 優先度：アイテム名上書き > カテゴリ名翻訳 > 生データ
-            const cName = itemOverride[i.name] || trans[i.category?.name] || i.category?.name || "その他";
-            
-            // アイテムオブジェクトに「決定したカテゴリ名」を保存しておく
-            i.dispCat = cName;
-            cats.add(cName);
-        });
-        
-        const sel = document.getElementById('catSelect');
-        sel.innerHTML = '<option value="">すべてのカテゴリ</option>';
-        
-        // カテゴリ一覧を五十音順に並び替えてセレクトボックスに追加
-        Array.from(cats).sort().forEach(c => {
-            sel.innerHTML += `<option value="${c}">${c}</option>`;
-        });
-        
-        fullHistory = []; 
-        renderList();
-
-        if (selectedItemId) {
-            showDetail(selectedItemId);
-        }
-    }
-
-    function renderList() {
-        const search = document.getElementById('searchInput').value.toLowerCase();
-        const cat = document.getElementById('catSelect').value;
-        const favOnly = document.getElementById('favOnly').checked;
-        const listDiv = document.getElementById('itemList');
-        
-        const filtered = currentItems.filter(i => {
-            const isFav = favorites.includes(i.id);
-            const isMatchSearch = i.name.toLowerCase().includes(search);
-            // initで決めた i.dispCat を使って判定
-            const isMatchCat = (!cat || i.dispCat === cat);
-            const isMatchFav = (!favOnly || isFav);
-            
-            return isMatchSearch && isMatchCat && isMatchFav;
-        });
-
-        listDiv.innerHTML = filtered.slice(0, 100).map(i => `
-            <div class="item-row" onclick="showDetail('${i.id}')">
-                <img src="images/${i.id}.png" loading="lazy">
-                <span>${i.name}</span>
-                <span class="fav-star ${favorites.includes(i.id)?'active':''}" onclick="toggleFav('${i.id}', event)">★</span>
-            </div>`).join('');
-    }
-
-    async function showDetail(id) {
-        selectedItemId = id;
-        document.getElementById('detailView').style.display = 'block';
-        
-        if (fullHistory.length === 0) {
-            document.getElementById('loading').style.display = 'flex';
-            const res = await fetch(`data-${currentMode}.json`);
-            fullHistory = await res.json();
-            document.getElementById('loading').style.display = 'none';
+        async function init() {
+            await changeMode('pvp');
         }
 
-        const labels = [], prices = [];
-        let itemInfo = null;
+        async function changeMode(mode) {
+            currentMode = mode;
+            historyStore = {}; // モードが変わったら履歴キャッシュをクリア
+            
+            try {
+                const res = await fetch(`list-${mode}.json`);
+                const data = await res.json();
+                items = data.items;
+                document.getElementById('updateTime').innerText = `最終更新: ${new Date(data.time).toLocaleString()}`;
 
-        fullHistory.forEach(entry => {
-            const item = entry.items.find(i => i.id === id);
-            if(item) {
-                labels.push(new Date(entry.time).toLocaleString('ja-JP', {month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit'}));
-                prices.push(item.lastLowPrice);
-                itemInfo = item;
+                // カテゴリ一覧の作成
+                const cats = [...new Set(items.map(i => i.category))].sort();
+                const catSelect = document.getElementById('categorySelect');
+                catSelect.innerHTML = '<option value="">すべてのカテゴリ</option>' + 
+                    cats.map(c => `<option value="${c}">${c}</option>`).join('');
+
+                render();
+            } catch (e) {
+                console.error("データの読み込みに失敗しました", e);
             }
-        });
+        }
 
-        if(!itemInfo) return;
+        function render() {
+            const query = document.getElementById('search').value.toLowerCase();
+            const cat = document.getElementById('categorySelect').value;
+            const listEl = document.getElementById('itemList');
 
-        document.getElementById('mainIcon').src = `images/${id}.png`;
-        document.getElementById('mainName').innerText = itemInfo.name;
-        document.getElementById('curPrice').innerText = prices[prices.length-1].toLocaleString() + " ₽";
-        document.getElementById('maxPrice').innerText = Math.max(...prices).toLocaleString() + " ₽";
-        document.getElementById('minPrice').innerText = Math.min(...prices).toLocaleString() + " ₽";
+            const filtered = items.filter(i => {
+                const matchName = i.name.toLowerCase().includes(query) || i.shortName?.toLowerCase().includes(query);
+                const matchCat = !cat || i.category === cat;
+                return matchName && matchCat;
+            });
 
-        if(chart) chart.destroy();
-        chart = new Chart(document.getElementById('mainChart'), {
-            type: 'line',
-            data: { labels, datasets: [{ label: 'Price', data: prices, borderColor: '#ffae00', tension: 0.2, fill: true, backgroundColor: 'rgba(255,174,0,0.05)', pointRadius: 2 }] },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#666', maxRotation: 0 } },
-                    y: { grid: { color: '#222' }, ticks: { color: '#666' } }
+            // 1マス単価の高い順に並び替え
+            filtered.sort((a, b) => {
+                const priceA = historyStore[a.id]?.cp || 0;
+                const priceB = historyStore[b.id]?.cp || 0;
+                return (priceB / b.slots) - (priceA / a.slots);
+            });
+
+            listEl.innerHTML = filtered.map(i => {
+                // historyStoreに最新価格があれば表示、なければ「詳細を表示」
+                const price = historyStore[i.id]?.cp || "---";
+                const perSlot = price !== "---" ? Math.floor(price / i.slots).toLocaleString() : "??";
+                
+                return `
+                <div class="item-card" onclick="showDetail('${i.id}')">
+                    <img src="${i.img}" alt="">
+                    <div class="item-name">${i.name}</div>
+                    <div class="item-price">${price.toLocaleString()} ₽</div>
+                    <div class="per-slot">1マス: ${perSlot} ₽</div>
+                </div>`;
+            }).join('');
+        }
+
+        async function showDetail(id) {
+            const item = items.find(i => i.id === id);
+            const modal = document.getElementById('modal');
+            modal.style.display = 'block';
+            document.getElementById('modalTitle').innerText = item.name;
+
+            // 履歴データの読み込み（まだ持っていなければ）
+            if (Object.keys(historyStore).length === 0) {
+                const res = await fetch(`data-${currentMode}.json`);
+                const json = await res.json();
+                historyStore = json.data;
+                render(); // メイン一覧の価格表示を更新
+            }
+
+            const history = historyStore[id]?.h || [];
+            
+            // スペック情報の表示
+            let infoText = `カテゴリ: ${item.category} | サイズ: ${item.slots}マス | 店売り: ${item.bestTraderPrice.toLocaleString()} ₽ (${item.bestTraderName})`;
+            if (item.props.damage) infoText += `<br>ダメージ: ${item.props.damage} | 貫通力: ${item.props.penetrationPower}`;
+            if (item.props.class) infoText += `<br>アーマークラス: ${item.props.class} | 耐久値: ${item.props.durability}`;
+            document.getElementById('modalInfo').innerHTML = infoText;
+
+            // グラフ描画
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            if (chart) chart.destroy();
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: history.map(h => new Date(h.t).toLocaleString()),
+                    datasets: [{
+                        label: 'Flea Market Price',
+                        data: history.map(h => h.p),
+                        borderColor: '#007bff',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: false, grid: { color: '#444' } },
+                        x: { grid: { display: false } }
+                    }
                 }
-            }
-        });
-    }
+            });
+        }
 
-    function setMode(m) {
-        currentMode = m;
-        document.getElementById('pvpBtn').classList.toggle('active', m === 'pvp');
-        document.getElementById('pveBtn').classList.toggle('active', m === 'pve');
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        window.onclick = (event) => {
+            if (event.target == document.getElementById('modal')) closeModal();
+        };
+
         init();
-    }
-
-    function toggleFav(id, e) {
-        e.stopPropagation();
-        if(favorites.includes(id)) favorites = favorites.filter(f => f !== id);
-        else favorites.push(id);
-        localStorage.setItem('eft_favs', JSON.stringify(favorites));
-        renderList();
-    }
-
-    init();
-</script>
+    </script>
 </body>
 </html>
