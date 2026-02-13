@@ -8,9 +8,10 @@
         :root {
             --bg-color: #0f0f0f;
             --card-bg: #1a1a1a;
-            --accent: #e59322; /* タルコフっぽいオレンジ */
+            --accent: #e59322;
             --text: #e0e0e0;
             --border: #333;
+            --success: #00ff88;
         }
 
         body {
@@ -21,43 +22,51 @@
             padding: 20px;
         }
 
-        h1 { text-align: center; color: var(--accent); }
+        h1 { text-align: center; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
 
-        /* コントロールエリア */
         .controls {
             max-width: 1000px;
-            margin: 0 auto 20px;
+            margin: 0 auto 30px;
             display: flex;
-            gap: 10px;
+            gap: 12px;
             flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
         }
 
         .search-input {
             flex: 1;
-            min-width: 250px;
-            padding: 12px;
-            border-radius: 4px;
+            min-width: 200px;
+            padding: 12px 20px;
+            border-radius: 25px;
             border: 1px solid var(--border);
             background: var(--card-bg);
             color: #fff;
+            outline: none;
+            transition: 0.3s;
         }
+        .search-input:focus { border-color: var(--accent); box-shadow: 0 0 10px rgba(229, 147, 34, 0.2); }
+
+        .btn-group { display: flex; gap: 5px; background: var(--card-bg); padding: 5px; border-radius: 8px; border: 1px solid var(--border); }
 
         .filter-btn {
-            padding: 10px 20px;
+            padding: 8px 16px;
             cursor: pointer;
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            color: #fff;
-            border-radius: 4px;
+            background: transparent;
+            border: none;
+            color: #888;
+            border-radius: 6px;
+            transition: 0.2s;
+            font-weight: bold;
+            font-size: 0.9em;
         }
 
+        .filter-btn:hover { color: #fff; }
         .filter-btn.active {
             background: var(--accent);
             color: #000;
-            font-weight: bold;
         }
 
-        /* アイテムリスト */
         .item-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -72,54 +81,49 @@
             border-radius: 8px;
             padding: 15px;
             position: relative;
-            transition: transform 0.1s;
+            transition: 0.2s;
         }
-
-        .item-card:hover {
-            border-color: var(--accent);
-            transform: translateY(-2px);
-        }
+        .item-card:hover { border-color: var(--accent); transform: translateY(-3px); }
 
         .fav-star {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 8px;
+            right: 8px;
             cursor: pointer;
-            font-size: 1.2em;
-            color: #555;
-            user-select: none;
+            font-size: 1.4em;
+            color: #333;
+            z-index: 10;
         }
-
-        .fav-star.active { color: var(--accent); }
+        .fav-star.active { color: var(--accent); text-shadow: 0 0 5px rgba(229, 147, 34, 0.5); }
 
         .item-icon {
-            width: 80px;
-            height: 80px;
+            width: 100%;
+            height: 90px;
             object-fit: contain;
             display: block;
-            margin: 0 auto 10px;
+            margin-bottom: 12px;
         }
 
         .item-name {
             font-size: 0.85em;
             font-weight: bold;
             text-align: center;
-            height: 2.5em;
+            height: 2.8em;
             overflow: hidden;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             margin-bottom: 10px;
+            color: #bbb;
         }
 
         .item-price {
             text-align: center;
-            font-size: 1.1em;
-            color: #00ff88;
+            font-size: 1.2em;
+            color: var(--success);
             font-weight: bold;
+            font-family: 'Courier New', monospace;
         }
-
-        .price-unit { font-size: 0.7em; margin-left: 2px; }
     </style>
 </head>
 <body>
@@ -128,8 +132,13 @@
 
     <div class="controls">
         <input type="text" id="searchInput" class="search-input" placeholder="アイテム名で検索...">
-        <button id="showFavBtn" class="filter-btn">お気に入りのみ</button>
-        <button id="modeBtn" class="filter-btn">PVP</button>
+        
+        <div class="btn-group">
+            <button id="pvpBtn" class="filter-btn active">PVP</button>
+            <button id="pveBtn" class="filter-btn">PVE</button>
+        </div>
+
+        <button id="favFilterBtn" class="filter-btn" style="border: 1px solid var(--border);">★ お気に入り</button>
     </div>
 
     <div id="itemGrid" class="item-grid">
@@ -138,91 +147,124 @@
     <script>
         let allItems = [];
         let favorites = JSON.parse(localStorage.getItem('eft_favs') || '[]');
-        let currentMode = 'pvp'; // pvp or pve
+        let currentMode = 'pvp';
         let showOnlyFav = false;
 
-        async function init() {
+        // データ読み込み関数
+        async function loadData() {
+            const grid = document.getElementById('itemGrid');
+            grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center;">読み込み中...</div>';
+
             try {
-                // data-pvp.json から現在の価格も含めて取得
                 const response = await fetch(`data-${currentMode}.json`);
-                const dataJson = await response.json();
+                if (!response.ok) throw new Error('Network response was not ok');
+                const json = await response.json();
                 
-                // 表示用に整形
-                allItems = Object.entries(dataJson.data).map(([id, info]) => ({
+                // データ構造を配列に変換
+                allItems = Object.entries(json.data).map(([id, info]) => ({
                     id: id,
                     name: info.n,
                     price: info.cp,
-                    img: `https://assets.tarkov.dev/${id}-512.webp` // IDから画像URLを生成
+                    img: `https://assets.tarkov.dev/${id}-512.webp`
                 }));
 
                 render();
             } catch (e) {
-                console.error("データの読み込みに失敗しました", e);
+                console.error("Load Error:", e);
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: red;">データの読み込みに失敗しました (data-${currentMode}.jsonが見つからないか空です)</div>`;
             }
         }
 
+        // 描画関数
         function render() {
             const grid = document.getElementById('itemGrid');
-            const searchTag = document.getElementById('searchInput').value.toLowerCase();
+            const query = document.getElementById('searchInput').value.toLowerCase();
             
             grid.innerHTML = '';
 
             const filtered = allItems.filter(item => {
-                const matchSearch = item.name.toLowerCase().includes(searchTag);
                 const isFav = favorites.includes(item.id);
+                const matchSearch = item.name.toLowerCase().includes(query);
                 if (showOnlyFav && !isFav) return false;
                 return matchSearch;
             });
 
-            // お気に入りを上に持ってくる
+            // お気に入り優先ソート
             filtered.sort((a, b) => {
                 const aFav = favorites.includes(a.id) ? 1 : 0;
                 const bFav = favorites.includes(b.id) ? 1 : 0;
                 return bFav - aFav;
             });
 
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center;">該当するアイテムがありません</div>';
+                return;
+            }
+
             filtered.forEach(item => {
                 const isFav = favorites.includes(item.id);
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.innerHTML = `
-                    <span class="fav-star ${isFav ? 'active' : ''}" onclick="toggleFav('${item.id}')">★</span>
-                    <img class="item-icon" src="${item.img}" loading="lazy">
+                    <div class="fav-star ${isFav ? 'active' : ''}">★</div>
+                    <img class="item-icon" src="${item.img}" loading="lazy" onerror="this.src='https://via.placeholder.com/80?text=No+Img'">
                     <div class="item-name">${item.name}</div>
-                    <div class="item-price">${item.price.toLocaleString()}<span class="price-unit">₽</span></div>
+                    <div class="item-price">${item.price.toLocaleString()} ₽</div>
                 `;
+
+                // 星クリック
+                card.querySelector('.fav-star').onclick = (e) => {
+                    e.stopPropagation();
+                    toggleFav(item.id);
+                };
+
                 grid.appendChild(card);
             });
         }
 
-        // お気に入りの切り替え
-        window.toggleFav = function(id) {
-            if (favorites.includes(id)) {
-                favorites = favorites.filter(favId => favId !== id);
+        function toggleFav(id) {
+            const index = favorites.indexOf(id);
+            if (index > -1) {
+                favorites.splice(index, 1);
             } else {
                 favorites.push(id);
             }
             localStorage.setItem('eft_favs', JSON.stringify(favorites));
             render();
+        }
+
+        // 初期化処理
+        window.onload = () => {
+            // 検索イベント
+            document.getElementById('searchInput').oninput = render;
+
+            // お気に入りフィルタ
+            document.getElementById('favFilterBtn').onclick = (e) => {
+                showOnlyFav = !showOnlyFav;
+                e.target.classList.toggle('active');
+                render();
+            };
+
+            // PVPボタン
+            document.getElementById('pvpBtn').onclick = (e) => {
+                if (currentMode === 'pvp') return;
+                currentMode = 'pvp';
+                document.getElementById('pvpBtn').classList.add('active');
+                document.getElementById('pveBtn').classList.remove('active');
+                loadData();
+            };
+
+            // PVEボタン
+            document.getElementById('pveBtn').onclick = (e) => {
+                if (currentMode === 'pve') return;
+                currentMode = 'pve';
+                document.getElementById('pveBtn').classList.add('active');
+                document.getElementById('pvpBtn').classList.remove('active');
+                loadData();
+            };
+
+            loadData();
         };
-
-        // イベント設定
-        document.getElementById('searchInput').addEventListener('input', render);
-        
-        document.getElementById('showOnlyFav').addEventListener('click', (e) => {
-            showOnlyFav = !showOnlyFav;
-            e.target.classList.toggle('active');
-            render();
-        });
-
-        // モード切り替え（PVP/PVE）
-        document.getElementById('modeBtn').addEventListener('click', (e) => {
-            currentMode = currentMode === 'pvp' ? 'pve' : 'pvp';
-            e.target.innerText = currentMode.toUpperCase();
-            init();
-        });
-
-        init();
     </script>
 </body>
 </html>
