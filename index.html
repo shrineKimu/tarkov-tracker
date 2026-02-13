@@ -33,10 +33,9 @@
 
         .item-list { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
         
-        /* 横長バーのデザイン */
         .item-row {
             display: grid;
-            grid-template-columns: 40px 60px 1fr 120px 120px 100px;
+            grid-template-columns: 40px 60px 1fr 80px 140px 140px;
             align-items: center; background: var(--card-bg); border: 1px solid var(--border);
             border-radius: 6px; padding: 8px 15px; gap: 15px;
         }
@@ -48,7 +47,7 @@
         .price-group { display: flex; flex-direction: column; align-items: flex-end; }
         .price-label { font-size: 0.6em; color: #666; margin-bottom: 2px; }
         .price-val { font-family: monospace; font-weight: bold; font-size: 1.05em; }
-        .per-slot { font-size: 0.7em; color: #888; margin-top: 2px; }
+        .per-slot { font-size: 0.75em; color: #888; margin-top: 2px; }
         
         .flea-color { color: var(--success); }
         .trader-color { color: #aaa; }
@@ -56,8 +55,8 @@
 
         .slot-badge { background: #333; color: #ccc; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; text-align: center; }
 
-        @media (max-width: 800px) {
-            .item-row { grid-template-columns: 35px 50px 1fr 100px 80px; }
+        @media (max-width: 850px) {
+            .item-row { grid-template-columns: 35px 50px 1fr 60px 100px; }
             .trader-col { display: none; }
         }
     </style>
@@ -76,12 +75,12 @@
         </div>
         <div class="row">
             <select id="sortSelect">
-                <option value="per_slot_desc">1マス単価が高い順</option>
-                <option value="price_desc">フリマ価格が高い順</option>
-                <option value="trader_desc">店売りが高い順</option>
-                <option value="category">カテゴリー順</option>
+                <option value="flea_per_slot">フリマ効率 (1マス単価) 順</option>
+                <option value="trader_per_slot">店売り効率 (1マス単価) 順</option>
+                <option value="flea_price">フリマ総額順</option>
+                <option value="trader_price">店売り総額順</option>
             </select>
-            <button id="favFilterBtn" class="btn">★ お気に入りのみ</button>
+            <button id="favFilterBtn" class="btn">★ お気に入り</button>
         </div>
     </div>
 
@@ -110,15 +109,18 @@
                 allItems = Object.entries(dataJson.data).map(([id, info]) => {
                     const detail = infoMap[id] || {};
                     const slots = detail.slots || 1;
+                    const fleaPrice = info.cp || 0;
+                    const traderPrice = detail.bestTraderPrice || 0;
                     return {
                         id: id,
                         name: info.n,
-                        fleaPrice: info.cp || 0,
-                        traderPrice: detail.bestTraderPrice || 0,
+                        fleaPrice: fleaPrice,
+                        traderPrice: traderPrice,
                         traderName: detail.bestTraderName || "---",
                         category: detail.category || "その他",
                         slots: slots,
-                        perSlot: Math.floor((info.cp || 0) / slots), // 1マス単価計算
+                        fleaPerSlot: Math.floor(fleaPrice / slots),
+                        traderPerSlot: Math.floor(traderPrice / slots),
                         img: `https://assets.tarkov.dev/${id}-512.webp`
                     };
                 });
@@ -142,16 +144,17 @@
                 const bFav = favorites.includes(b.id) ? 1 : 0;
                 if (aFav !== bFav) return bFav - aFav;
 
-                if (sortVal === 'per_slot_desc') return b.perSlot - a.perSlot;
-                if (sortVal === 'price_desc') return b.fleaPrice - a.fleaPrice;
-                if (sortVal === 'trader_desc') return b.traderPrice - a.traderPrice;
-                if (sortVal === 'category') return a.category.localeCompare(b.category);
+                if (sortVal === 'flea_per_slot') return b.fleaPerSlot - a.fleaPerSlot;
+                if (sortVal === 'trader_per_slot') return b.traderPerSlot - a.traderPerSlot;
+                if (sortVal === 'flea_price') return b.fleaPrice - a.fleaPrice;
+                if (sortVal === 'trader_price') return b.traderPrice - a.traderPrice;
                 return 0;
             });
 
             filtered.forEach(item => {
                 const isFav = favorites.includes(item.id);
-                const isTraderBetter = item.traderPrice > item.fleaPrice;
+                const isTraderBetter = item.traderPerSlot >= item.fleaPerSlot;
+                
                 const row = document.createElement('div');
                 row.className = 'item-row';
                 row.innerHTML = `
@@ -161,15 +164,16 @@
                         <div class="item-name">${item.name}</div>
                         <div class="item-category">${item.category}</div>
                     </div>
-                    <div class="slot-badge">${item.slots} Slot</div>
+                    <div class="slot-badge">${item.slots} 枠</div>
                     <div class="price-group">
                         <span class="price-label">FLEA MARKET</span>
                         <span class="price-val flea-color">${item.fleaPrice.toLocaleString()} ₽</span>
-                        <span class="per-slot">@${item.perSlot.toLocaleString()}</span>
+                        <span class="per-slot">効率: ${item.fleaPerSlot.toLocaleString()} /枠</span>
                     </div>
                     <div class="price-group trader-col">
                         <span class="price-label">${item.traderName}</span>
                         <span class="price-val trader-color ${isTraderBetter?'trader-high':''}">${item.traderPrice.toLocaleString()} ₽</span>
+                        <span class="per-slot ${isTraderBetter?'trader-high':''}">効率: ${item.traderPerSlot.toLocaleString()} /枠</span>
                     </div>
                 `;
                 listDiv.appendChild(row);
@@ -187,11 +191,18 @@
         document.getElementById('sortSelect').onchange = render;
         document.getElementById('favFilterBtn').onclick = (e) => {
             showOnlyFav = !showOnlyFav;
-            e.target.style.borderColor = showOnlyFav ? 'var(--accent)' : '';
+            e.target.style.backgroundColor = showOnlyFav ? 'var(--accent)' : '';
+            e.target.style.color = showOnlyFav ? '#000' : '';
             render();
         };
-        document.getElementById('pvpBtn').onclick = () => { currentMode='pvp'; document.getElementById('pvpBtn').classList.add('active'); document.getElementById('pveBtn').classList.remove('active'); loadData(); };
-        document.getElementById('pveBtn').onclick = () => { currentMode='pve'; document.getElementById('pveBtn').classList.add('active'); document.getElementById('pvpBtn').classList.remove('active'); loadData(); };
+        const updateMode = (mode) => {
+            currentMode = mode;
+            document.getElementById('pvpBtn').classList.toggle('active', mode==='pvp');
+            document.getElementById('pveBtn').classList.toggle('active', mode==='pve');
+            loadData();
+        };
+        document.getElementById('pvpBtn').onclick = () => updateMode('pvp');
+        document.getElementById('pveBtn').onclick = () => updateMode('pve');
 
         loadData();
     </script>
