@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# --- ここから追加 ---
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# --- ここまで追加 ---
+
 jobs:
   build:
     runs-on: ubuntu-latest
