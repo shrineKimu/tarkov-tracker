@@ -1,30 +1,4 @@
 const fs = require('fs');
-const path = require('path');
-
-// 画像保存用フォルダの作成
-const imgDir = path.join(__dirname, 'images');
-if (!fs.existsSync(imgDir)) {
-    fs.mkdirSync(imgDir);
-}
-
-// 画像をダウンロードする関数
-async function downloadImage(id, url) {
-    const filePath = path.join(imgDir, `${id}.png`);
-    
-    // すでに画像が存在する場合はスキップ（効率化）
-    if (fs.existsSync(filePath)) return;
-
-    try {
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const arrayBuffer = await res.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        fs.writeFileSync(filePath, buffer);
-        console.log(`Downloaded: ${id}.png`);
-    } catch (e) {
-        console.error(`Failed to download ${id}:`, e.message);
-    }
-}
 
 async function collect() {
     const query = JSON.stringify({
@@ -59,34 +33,21 @@ async function collect() {
         const result = await response.json();
         const timestamp = new Date().toISOString();
 
-        const updateStorage = async (mode, items) => {
+        const updateStorage = (mode, items) => {
             const listFile = `list-${mode}.json`;
             const dataFile = `data-${mode}.json`;
 
-            const specList = [];
-            let historyData = {};
-
-            if (fs.existsSync(dataFile)) {
-                try {
-                    historyData = JSON.parse(fs.readFileSync(dataFile, 'utf8')).data || {};
-                } catch (e) { historyData = {}; }
-            }
-
-            for (const i of items) {
+            // 1. スペックリスト作成 (画像はURLのまま)
+            const specList = items.map(i => {
                 const slots = (i.width || 1) * (i.height || 1);
                 
-                // --- 画像のダウンロード処理 ---
-                if (i.image512pxLink) {
-                    await downloadImage(i.id, i.image512pxLink);
-                }
-
                 let bestTrader = { price: 0, name: "" };
                 if (i.sellFor && i.sellFor.length > 0) {
                     const best = i.sellFor.reduce((max, curr) => max.price > curr.price ? max : curr);
                     bestTrader = { price: best.price, name: best.vendor.name };
                 }
 
-                specList.push({
+                return {
                     id: i.id,
                     name: i.name,
                     shortName: i.shortName,
@@ -95,28 +56,45 @@ async function collect() {
                     category: i.category?.name || "その他",
                     bestTraderPrice: bestTrader.price,
                     bestTraderName: bestTrader.name,
-                    img: `images/${i.id}.png`, // 自前のパスに変更
+                    img: i.image512pxLink, // URLを直接保持
                     props: i.properties || {}
-                });
+                };
+            });
 
-                if (i.lastLowPrice > 0) {
-                    if (!historyData[i.id]) historyData[i.id] = { n: i.name, h: [] };
-                    historyData[i.id].cp = i.lastLowPrice;
-                    historyData[i.id].h.push({ t: timestamp, p: i.lastLowPrice });
-                    if (historyData[i.id].h.length > 672) historyData[i.id].h = historyData[i.id].h.slice(-672);
+            // 2. 価格履歴の更新
+            let historyData = {};
+            if (fs.existsSync(dataFile)) {
+                try {
+                    const raw = fs.readFileSync(dataFile, 'utf8');
+                    historyData = JSON.parse(raw).data || {};
+                } catch (e) {
+                    historyData = {};
                 }
             }
+
+            items.filter(i => i.lastLowPrice > 0).forEach(i => {
+                if (!historyData[i.id]) {
+                    historyData[i.id] = { n: i.name, h: [] };
+                }
+                historyData[i.id].cp = i.lastLowPrice;
+                historyData[i.id].h.push({ t: timestamp, p: i.lastLowPrice });
+
+                // 7日分（15分×672回）
+                if (historyData[i.id].h.length > 672) {
+                    historyData[i.id].h = historyData[i.id].h.slice(-672);
+                }
+            });
 
             fs.writeFileSync(listFile, JSON.stringify({ time: timestamp, items: specList }));
             fs.writeFileSync(dataFile, JSON.stringify({ time: timestamp, data: historyData }));
         };
 
-        await updateStorage('pvp', result.data.pvp);
-        await updateStorage('pve', result.data.pve);
+        updateStorage('pvp', result.data.pvp);
+        updateStorage('pve', result.data.pve);
 
-        console.log(`[${new Date().toLocaleTimeString()}] 収集・画像保存完了`);
+        console.log(`[${new Date().toLocaleTimeString()}] 収集完了 (画像URL参照方式)`);
     } catch (e) {
-        console.error("エラー:", e);
+        console.error("Error:", e);
         process.exit(1);
     }
 }
