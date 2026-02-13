@@ -9,10 +9,6 @@ async function collect() {
         }`
     });
 
-    // 画像保存用のフォルダを作成
-    const imgDir = path.join(__dirname, 'images');
-    if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir);
-
     try {
         const response = await fetch('https://api.tarkov.dev/graphql', {
             method: 'POST',
@@ -22,42 +18,33 @@ async function collect() {
         const result = await response.json();
         const timestamp = new Date().toISOString();
 
-        if (!result.data) throw new Error("API data missing");
-
-        const updateStorage = async (filename, items) => {
+        const updateStorage = (mode, items) => {
+            const historyFile = `data-${mode}.json`;
+            const listFile = `list-${mode}.json`;
+            
+            // 1. 履歴データの更新
             let history = [];
-            if (fs.existsSync(filename)) {
-                try { history = JSON.parse(fs.readFileSync(filename, 'utf8')); } catch (e) { history = []; }
+            if (fs.existsSync(historyFile)) {
+                try { history = JSON.parse(fs.readFileSync(historyFile, 'utf8')); } catch (e) { history = []; }
             }
-
-            const filteredItems = items.filter(i => i.lastLowPrice > 0);
-
-            // 画像の保存処理
-            for (const item of filteredItems) {
-                const imgPath = path.join(imgDir, `${item.id}.png`);
-                // まだ画像を持っていない場合のみダウンロード
-                if (!fs.existsSync(imgPath) && item.iconLink) {
-                    try {
-                        const imgRes = await fetch(item.iconLink);
-                        const buffer = await imgRes.arrayBuffer();
-                        fs.writeFileSync(imgPath, Buffer.from(buffer));
-                        console.log(`新着画像を保存: ${item.name}`);
-                    } catch (e) { console.error(`画像保存失敗: ${item.id}`); }
-                }
-            }
-
-            history.push({ time: timestamp, items: filteredItems });
+            const filtered = items.filter(i => i.lastLowPrice > 0);
+            history.push({ time: timestamp, items: filtered });
             if (history.length > 2016) history = history.slice(-2016);
-            fs.writeFileSync(filename, JSON.stringify(history, null, 2));
-            return filteredItems.length;
+            fs.writeFileSync(historyFile, JSON.stringify(history)); // 履歴は圧縮して保存
+
+            // 2. 表示用軽量リストの作成 (最新の1回分だけ)
+            fs.writeFileSync(listFile, JSON.stringify({
+                time: timestamp,
+                items: filtered
+            }));
         };
 
-        await updateStorage('data-pvp.json', result.data.pvp);
-        await updateStorage('data-pve.json', result.data.pve);
+        updateStorage('pvp', result.data.pvp);
+        updateStorage('pve', result.data.pve);
 
-        console.log(`更新完了: ${timestamp}`);
+        console.log("収集とリスト作成が完了しました");
     } catch (e) {
-        console.error(e.message);
+        console.error(e);
         process.exit(1);
     }
 }
