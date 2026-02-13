@@ -179,8 +179,43 @@
     let favorites = JSON.parse(localStorage.getItem('eft_favs') || '[]');
     let selectedItemId = null;
 
-    const categoryList = ["アサルトカービン", "アサルトライフル", "インスリン", "キーカード", "サブマシンガン", "ショットガン", "スナイパーライフル", "ピストル", "マークスマンライフル", "マシンガン", "ライトマシンガン", "リボルバー", "医療品", "弾薬", "食料", "鍵"];
-    const trans = { "Arm Band": "腕章", "Armor Plate": "アーマープレート", "Auxiliary Mod": "補助パーツ", "Compass": "コンパス", "Face Cover": "フェイスカバー", "Fuel": "燃料", "Headwear": "ヘッドウェア", "Keycard": "キーカード", "Mechanical Key": "メカニカルキー", "Repair Kits": "修理キット", "Stimulant": "注入器(スティム)", "Thermal Vision": "サーマルビジョン" };
+    // 実データから抽出した主要な日本語カテゴリリスト
+const categoryList = [
+    "アサルトライフル", "アサルトカービン", "スナイパーライフル", "マークスマンライフル", 
+    "ショットガン", "ハンドガン", "サブマシンガン", "マシンガン", "投擲武器", "ナイフ",
+    "弾薬", "弾薬コンテナ", "マガジン", "医療品", "薬", "食料", "飲料", "バックパック", 
+    "チェストリグ", "アーマー", "ヘッドフォン", "鍵", "コンテナ", "情報アイテム"
+];
+
+// 英語で入ってきているカテゴリ名を日本語に変換するためのマップ
+const trans = { 
+    "Mechanical Key": "鍵", 
+    "Keycard": "キーカード",
+    "Armor": "アーマー",
+    "Headwear": "ヘッドウェア",
+    "Face Cover": "フェイスカバー",
+    "Backpack": "バックパック",
+    "Tactical Rig": "チェストリグ",
+    "Medical Supplies": "医療品",
+    "Medication": "薬",
+    "Food": "食料",
+    "Drink": "飲料",
+    "Ammo": "弾薬",
+    "Ammo Container": "弾薬コンテナ",
+    "Magazine": "マガジン",
+    "Handgun": "ハンドガン",
+    "Assault Rifle": "アサルトライフル",
+    "Shotgun": "ショットガン",
+    "Grenade": "投擲武器",
+    "Melee": "ナイフ",
+    "Container": "コンテナ",
+    "Info Item": "情報アイテム",
+    "Special Item": "特殊アイテム",
+    "Map": "マップ",
+    "Stimulant": "注入器(スティム)",
+    "Repair Kits": "修理キット",
+    "Fuel": "燃料"
+};
 
     async function init() {
         const res = await fetch(`list-${currentMode}.json`);
