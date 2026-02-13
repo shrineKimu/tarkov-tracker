@@ -14,6 +14,6 @@ jobs:
         run: |
           git config user.name "Auto-Logger"
           git config user.email "actions@github.com"
-          git add data-pvp.json data-pve.json images/*.png # 画像フォルダも追加
-          git commit -m "Update data and images [skip ci]" || echo "No changes"
+          git add data-pvp.json data-pve.json list-pvp.json list-pve.json images/*.png
+          git commit -m "Update list and data [skip ci]" || echo "No changes"
           git push
